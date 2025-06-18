@@ -11,7 +11,7 @@ The custom GDAL random raster format allows you to create virtual raster dataset
 To use this custom format, you pass a JSON string directly to the GDALOpen function. This JSON string acts as the "dataset name" and contains all the necessary parameters to define the random raster, including its dimensions, data type, and the parameters of the random distribution.
 
 Here's the general structure of the JSON string:
-
+```json
 {
   "type": "RANDOM_RASTER",
   "rows": <integer>,
@@ -25,7 +25,7 @@ Here's the general structure of the JSON string:
     // Parameters specific to the chosen distribution
   }
 }
-
+```
 ## Top-Level Parameters
 
 * type: (Required, string) Must be set to "RANDOM_RASTER". This identifies the custom driver.
