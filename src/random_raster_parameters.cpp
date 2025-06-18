@@ -103,87 +103,84 @@ namespace pronto {
       else if (str == "GDT_Float64") return GDT_Float64;
       else return GDT_Unknown;
     }
-
+    
     bool is_random_raster_json(const nlohmann::json& j) {
-      try {
-        // Check if the "type" field exists and equals "RANDOM_RASTER".
-        return j.at("type").get<std::string>() == "RANDOM_RASTER";
-      }
-      catch (const nlohmann::json::exception&) {
-        // If "type" field doesn't exist, it's not our JSON.
-        return false;
-      }
+      return j.contains("type") && j["type"].is_string() && j["type"].get<std::string>() == "RANDOM_RASTER";
     }
-    bool random_raster_parameters::from_json(const nlohmann::json& j) {
+
+    random_raster_parameters::random_raster_parameters() :
+      m_type("RANDOM_RASTER"),
+      m_rows(0),
+      m_cols(0),
+      m_data_type(GDT_Unknown),
+      m_seed(static_cast<unsigned int>(std::time(nullptr))),
+      m_block_rows(256),
+      m_block_cols(256),
+      m_seed_set(false),
+      m_block_rows_set(false),
+      m_block_cols_set(false),
+      m_distribution(distribution_type::unspecified),
+      m_distribution_parameters(nlohmann::json::object()) // Initialize as empty JSON object
+    {
+    }
+    bool random_raster_parameters::from_json(const nlohmann::json & j) 
+    {
       try {
-        m_type = j.at("type").get<std::string>();
-
-        // Mandatory fields - will throw if not present
-        j.at("rows").get_to(m_rows);
-        j.at("cols").get_to(m_cols);
-        j.at("bits").get_to(m_bits);
-
-        std::string data_type_str;
-        j.at("data_type").get_to(data_type_str);
-        m_data_type = string_to_gdal_data_type(data_type_str);
-
-        // Optional parameters
-        if (j.contains("seed") && j["seed"].is_number_integer()) {
-          m_seed = j["seed"].get<unsigned int>();
-					m_seed_set = true; // Update flag to indicate seed was set
-        }
-               
-        if (j.contains("block_rows") && j["block_rows"].is_number_integer()) {
-          m_block_rows = j["block_rows"].get<int>();
-          m_block_rows_set = true; // Update flag
-        }
-
-        if (j.contains("block_cols") && j["block_cols"].is_number_integer()) {
-          m_block_cols = j["block_cols"].get<int>();
-          m_block_cols_set = true; // Update flag
-        }
-
-        // Distribution type
-        if (j.contains("distribution")) {
-          std::string dist_str = j.at("distribution").get<std::string>();
-          m_distribution = string_to_distribution_type(dist_str);
+        m_type = j.value("type", "RANDOM_RASTER");
+        m_rows = j.value("rows", 0);
+        m_cols = j.value("cols", 0);
+    
+        if (j.contains("data_type") && j["data_type"].is_string()) {
+          m_data_type = string_to_gdal_data_type(j["data_type"].get<std::string>());
         }
         else {
-          m_distribution = distribution_type::unspecified;
+          m_data_type = GDT_Unknown; // Default or error handling
         }
 
-        // Distribution parameters
-        m_distribution_parameters.clear(); // Clear any existing parameters
-        if (j.contains("parameters") && j["parameters"].is_object()) {
-          const auto& params_json = j["parameters"];
-          for (auto& [key, value] : params_json.items()) {
-            // Store values as their JSON string representation.
-            // This handles numbers, booleans, arrays, etc., correctly.
-            m_distribution_parameters[key] = value.dump();
-          }
+        if (j.contains("seed")) {
+          m_seed = j["seed"].get<unsigned int>();
+          m_seed_set = true;
         }
-        // Perform internal validation.
-        return validate();
+
+        if (j.contains("block_rows")) {
+          m_block_rows = j["block_rows"].get<int>();
+          m_block_rows_set = true;
+        }
+
+        if (j.contains("block_cols")) {
+          m_block_cols = j["block_cols"].get<int>();
+          m_block_cols_set = true;
+        }
+
+        if (j.contains("distribution") && j["distribution"].is_string()) {
+          m_distribution = string_to_distribution_type(j["distribution"].get<std::string>());
+        }
+        else {
+          m_distribution = distribution_type::unspecified; // Default or error
+        }
+
+        if (j.contains("distribution_parameters") && j["distribution_parameters"].is_object()) {
+          m_distribution_parameters = j["distribution_parameters"];
+        }
+        else {
+          m_distribution_parameters = nlohmann::json::object(); // Ensure it's an empty object if not present
+        }
+
       }
       catch (const nlohmann::json::exception& e) {
-        CPLError(CE_Failure, CPLE_AppDefined, "Error parsing JSON parameters: %s. Check for required fields: 'type', 'width', 'height', 'bits', 'data_type'.", e.what());
+        CPLError(CE_Failure, CPLE_AppDefined, "JSON parsing error: %s", e.what());
         return false;
       }
-      catch (const std::exception& e) {
-        CPLError(CE_Failure, CPLE_AppDefined, "Error processing JSON parameters: %s", e.what());
-        return false;
-      }
+      return validate();
     }
+
 
     nlohmann::json random_raster_parameters::to_json() const {
       nlohmann::json j;
       j["type"] = m_type;
       j["rows"] = m_rows;
       j["cols"] = m_cols;
-      j["bits"] = m_bits;
       j["data_type"] = gdal_data_type_to_string(m_data_type);
-
-      // Only include seed, block_rows, block_cols if it was set by user
       if (m_seed_set) {
         j["seed"] = m_seed;
       }
@@ -191,67 +188,44 @@ namespace pronto {
         j["block_rows"] = m_block_rows;
       }
       if (m_block_cols_set) {
-         j["block_cols"] = m_block_cols;
+        j["block_cols"] = m_block_cols;
       }
-
-      // Include distribution type
-      if (m_distribution != distribution_type::unspecified) {
-        j["distribution"] = string_from_distribution_type(m_distribution);
-      }
-
-      // Include distribution parameters
-      if (!m_distribution_parameters.empty()) {
-        nlohmann::json params_json;
-        for (const auto& pair : m_distribution_parameters) {
-          // Parse the stored string back to a JSON value for correct serialization
-          params_json[pair.first] = nlohmann::json::parse(pair.second);
-        }
-        j["parameters"] = params_json;
-      }
-
+      j["distribution"] = string_from_distribution_type(m_distribution);
+      j["distribution_parameters"] = m_distribution_parameters; // Directly use the stored JSON object
       return j;
     }
     
     bool random_raster_parameters::validate() const {
       if (m_type != "RANDOM_RASTER") {
-        CPLError(CE_Failure, CPLE_AppDefined, "Invalid 'type' parameter. Expected 'RANDOM_RASTER', got '%s'.", m_type.c_str());
+        CPLError(CE_Failure, CPLE_AppDefined, "Invalid type, must be RANDOM_RASTER.");
         return false;
       }
       if (m_rows <= 0 || m_cols <= 0) {
-        CPLError(CE_Failure, CPLE_AppDefined, "Random raster dimensions must be positive (rows x cols provided: %dx%d).", m_rows, m_cols);
+        CPLError(CE_Failure, CPLE_AppDefined, "Rows and cols must be greater than 0.");
         return false;
       }
       if (m_data_type == GDT_Unknown) {
-        CPLError(CE_Failure, CPLE_AppDefined, "Data type must be specified and valid.");
+        CPLError(CE_Failure, CPLE_AppDefined, "Data type not specified or unknown.");
         return false;
       }
-      if (m_bits <= 0 || m_bits > GDALGetDataTypeSizeBits(m_data_type)) {
-        CPLError(CE_Failure, CPLE_AppDefined, "Invalid number of bits (%d) for data type %s (max: %d).", m_bits, GDALGetDataTypeName(m_data_type), GDALGetDataTypeSizeBits(m_data_type));
+      if (m_distribution == distribution_type::unspecified) {
+        CPLError(CE_Failure, CPLE_AppDefined, "Distribution type not specified or unknown.");
         return false;
       }
-      if (m_block_rows <= 0 || m_block_cols <= 0) {
-        CPLError(CE_Failure, CPLE_AppDefined, "Block sizes must be positive (BlockRows=%d, BlockCols=%d).", m_block_rows, m_block_cols);
-        return false;
-      }
+      // Add more specific validation for distribution parameters if needed,
+      // perhaps by trying to get them with validation in a dummy call.
       return true;
     }
 
     bool random_raster_parameters::from_string_json(const std::string& json_string)
     {
-      *this = random_raster_parameters(); // Reset all members to defaults
-
       try {
         nlohmann::json j = nlohmann::json::parse(json_string);
-
-        // Check if it's the correct type of JSON for our driver.
-        if (!is_random_raster_json(j)) {
-          return false; // Quiet failure for incorrect type
-        }
-        // Proceed with full population and validation.
         return from_json(j);
       }
-      catch (const nlohmann::json::exception&) {
-        return false; // Quiet failure for malformed JSON
+      catch (const nlohmann::json::parse_error& e) {
+        CPLError(CE_Failure, CPLE_AppDefined, "JSON parse error from string: %s", e.what());
+        return false;
       }
     }
   } // namespace raster

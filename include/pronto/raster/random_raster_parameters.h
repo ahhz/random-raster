@@ -10,16 +10,16 @@
 #pragma once
 
 #include <pronto/raster/block_generator_interface.h>
-#include <pronto/raster/random_block_generator.h> 
+#include <pronto/raster/random_block_generator.h>
 
 #include <ctime>
 #include <functional> // For std::function
 #include <random>
 #include <limits>
-#include <map>
 #include <stdexcept>
 #include <type_traits> // For std::is_integral, std::is_floating_point
 #include <vector>
+#include <string> // Added for std::string functions
 
 #include <cpl_error.h>
 #include <gdal.h>
@@ -94,18 +94,19 @@ namespace pronto {
       unspecified
     };
 
-    std::string string_from_distribution_type(distribution_type dist_enum);
+    // Forward declarations for functions assumed to be defined elsewhere
+    // or to be implemented. Providing basic stubs if not defined in your snippets.
+    std::string string_from_distribution_type(distribution_type dist_enum); 
     distribution_type string_to_distribution_type(const std::string& dist_str);
     std::string gdal_data_type_to_string(GDALDataType type);
     GDALDataType string_to_gdal_data_type(const std::string& str);
     bool is_random_raster_json(const nlohmann::json& j);
-    
+
     struct random_raster_parameters
     {
-      std::string   m_type;
-      int       m_rows;
-      int       m_cols;
-      int       m_bits;
+      std::string  m_type;
+      int          m_rows;
+      int          m_cols;
       GDALDataType m_data_type;
 
       unsigned int m_seed;
@@ -116,39 +117,32 @@ namespace pronto {
       bool m_block_cols_set;
 
       distribution_type m_distribution;
-      std::map<std::string, std::string> m_distribution_parameters;
+      nlohmann::json m_distribution_parameters;
 
-      random_raster_parameters() :
-        m_type("RANDOM_RASTER"),
-        m_rows(0),
-        m_cols(0),
-        m_bits(0),
-        m_data_type(GDT_Unknown),
-        m_seed(static_cast<unsigned int>(std::time(nullptr))),
-        m_block_rows(256),
-        m_block_cols(256),
-        m_seed_set(false),
-        m_block_rows_set(false),
-        m_block_cols_set(false),
-        m_distribution(distribution_type::unspecified)
-      {
-      }
+      random_raster_parameters();
 
       bool from_json(const nlohmann::json& j);
-      nlohmann::json to_json() const;
+      nlohmann::json to_json() const;;
       bool validate() const;
+
       bool from_string_json(const std::string& json_string);
 
       template<typename T>
       T get_parameter(const std::string& key, T default_value, std::function<bool(T)> validate_func) const {
-        std::map<std::string, std::string>::const_iterator iter = m_distribution_parameters.find(key);
         T value;
-        if (iter != m_distribution_parameters.end()) {
-          if (std::is_integral<T>::value) {
-            value = static_cast<T>(std::stoll(iter->second));
+        if (m_distribution_parameters.contains(key)) {
+          try {
+            value = m_distribution_parameters[key].get<T>();
           }
-          else { // std::is_floating_point<T>::value
-            value = static_cast<T>(std::stod(iter->second));
+          catch (const nlohmann::json::type_error& e) {
+            throw std::runtime_error("Type mismatch for parameter '" + key + "'. Expected " + typeid(T).name() + ", but JSON contains a different type: " + e.what());
+          }
+          catch (const nlohmann::json::out_of_range& e) {
+            throw std::runtime_error("Value out of range for parameter '" + key + "': " + e.what());
+          }
+          catch (const nlohmann::json::exception& e) {
+            // Catch other nlohmann::json exceptions for robust error handling
+            throw std::runtime_error("JSON error retrieving parameter '" + key + "': " + e.what());
           }
         }
         else {
@@ -156,31 +150,32 @@ namespace pronto {
         }
 
         if (!validate_func(value)) {
-          throw std::runtime_error("Invalid value for parameter '" + key + "'");
+          throw std::runtime_error("Invalid value for parameter '" + key + "' based on validation function.");
         }
         return value;
       }
 
       template<typename T>
       std::vector<T> get_vector_parameter(const std::string& key) const {
-        std::map<std::string, std::string>::const_iterator iter = m_distribution_parameters.find(key);
-        if (iter == m_distribution_parameters.end()) {
+        if (!m_distribution_parameters.contains(key)) {
           throw std::runtime_error("Required parameter '" + key + "' for this distribution is missing.");
         }
-        nlohmann::json j_array = nlohmann::json::parse(iter->second);
+        const auto& j_array = m_distribution_parameters[key];
         if (!j_array.is_array()) {
           throw std::runtime_error("Parameter '" + key + "' must be a JSON array.");
         }
-        std::vector<T> vec;
-        for (nlohmann::json::const_iterator item = j_array.begin(); item != j_array.end(); ++item) {
-          if (std::is_integral<T>::value) {
-            vec.push_back(static_cast<T>(item->get<long long>()));
-          }
-          else {
-            vec.push_back(static_cast<T>(item->get<double>()));
-          }
+        try {
+          return j_array.get<std::vector<T>>(); // nlohmann::json can directly convert to std::vector<T>
         }
-        return vec;
+        catch (const nlohmann::json::type_error& e) {
+          throw std::runtime_error("Type mismatch in array for parameter '" + key + "': " + e.what());
+        }
+        catch (const nlohmann::json::out_of_range& e) {
+          throw std::runtime_error("Value out of range in array for parameter '" + key + "': " + e.what());
+        }
+        catch (const nlohmann::json::exception& e) {
+          throw std::runtime_error("JSON error retrieving vector parameter '" + key + "': " + e.what());
+        }
       }
 
       // make_generator takes DistributionType (e.g., std::uniform_int_distribution<short>)
@@ -358,8 +353,6 @@ namespace pronto {
           throw std::runtime_error("Unsupported integer distribution type for GDT_Byte and distribution: " + std::to_string(static_cast<int>(m_distribution)));
         }
       }
-
-       
 
       template<GDALDataType T>
       std::unique_ptr<block_generator_interface> dispatch_real_distribution() const {
