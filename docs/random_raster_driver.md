@@ -4,11 +4,11 @@ This document provides usage instructions for the custom GDAL raster format that
 
 ## Introduction
 
-The custom GDAL random raster format allows you to create virtual raster datasets filled with random values drawn from various standard statistical distributions. Instead of pointing to a file path, you define the raster's properties and the desired random distribution using a JSON string, which is then passed to ```GDALOpen```. 
+The custom GDAL random raster format allows you to create virtual raster datasets filled with random values drawn from various standard statistical distributions. This is a virtual raster as the values are not stored on disk, but generated as needed. There are two ways of opening a dataset: from a settings file or using a settings string; both of these are in the same JSON format. 
 
 ## Usage
 
-To use this custom format, you pass a JSON string directly to the ```GDALOpen``` function. This JSON string acts as the "dataset name" and contains all the necessary parameters to define the random raster, including its dimensions, data type, and the parameters of the random distribution.
+There are two options for opening a Random Raster. The first option is to specify the settings in a JSON file (with .json extension), the file can be opened using ```GDALOpen```. Instead of an actual file path, you can also define the raster's properties and the desired random distribution in a JSON string, which is then passed to ```GDALOpen```. The JSON string acts as the "dataset name" and contains all the necessary parameters to define the random raster, including its dimensions, data type, and the parameters of the random distribution.
 
 Here's the general structure of the JSON string:
 ```json
