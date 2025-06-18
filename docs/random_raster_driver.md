@@ -1,6 +1,6 @@
-# Custom GDAL Random Raster Format Documentation
+# GDAL Random Raster Format (custom format)
 
-This document provides usage instructions for the custom GDAL raster format that generates rasters of random values. This format leverages the GDAL caching mechanism for efficient data access.
+This document provides usage instructions for the custom GDAL raster format that generates rasters of random values. This format leverages the GDAL caching mechanism for efficient data access and the distributions provided in the <random> library of the C++ standard library (since C++11).
 
 ## Introduction
 
@@ -55,16 +55,16 @@ This custom format supports a wide range of standard C++ random distributions. T
 
 ### Integer Distributions
 
-These distributions are suitable for GDT_Byte, GDT_UInt16, GDT_Int16, GDT_UInt32, and GDT_Int32 data types.
+These distributions are suitable for ```GDT_Byte```, ```GDT_UInt16```, ```GDT_Int16```, ```GDT_UInt32```, and ```GDT_Int32``` data types.
 
-1.  uniform_integer
+1.  ```uniform_integer```
     * Description: Generates uniformly distributed random integers in a specified range.
     * Parameters:
-        * a: (Integer) The inclusive lower bound of the range.
-            * Default: std::numeric_limits<Type>::min() (e.g., 0 for GDT_Byte, -32768 for GDT_Int16).
-        * b: (Integer) The inclusive upper bound of the range.
-            * Default: std::numeric_limits<Type>::max() (e.g., 255 for GDT_Byte, 32767 for GDT_Int16).
-    * Constraints: a <= b. For GDT_Byte, a and b must be between 0 and 255.
+        * ```a```: (Integer) The inclusive lower bound of the range.
+            * Default: std::numeric_limits<Type>::min() (e.g., 0 for ```GDT_Byte```, -32768 for ```GDT_Int16```).
+        * ```b```: (Integer) The inclusive upper bound of the range.
+            * Default: std::numeric_limits<Type>::max() (e.g., 255 for ```GDT_Byte```, 32767 for ```GDT_Int16```).
+    * Constraints: ```a``` <= ```b```. For ```GDT_Byte```, ```a``` and ```b``` must be between 0 and 255.
 
 2.  bernoulli
     * Description: Generates 0 or 1 with a specified probability.
