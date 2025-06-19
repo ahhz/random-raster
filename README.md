@@ -6,4 +6,5 @@ The library requires the following:
 - GDAL 
 - rlohmann/JSON
 
+See the documentation [here](https://github.com/ahhz/random-raster/blob/main/docs/random_raster_driver.md)
    
