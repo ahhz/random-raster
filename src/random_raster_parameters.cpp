@@ -80,30 +80,52 @@ namespace pronto {
       }
     }
 
-    std::string gdal_data_type_to_string(GDALDataType type) {
-      switch (type) {
-      case GDT_Byte: return "GDT_Byte";
-      case GDT_UInt16: return "GDT_UInt16";
-      case GDT_Int16: return "GDT_Int16";
-      case GDT_UInt32: return "GDT_UInt32";
-      case GDT_Int32: return "GDT_Int32";
-      case GDT_Float32: return "GDT_Float32";
-      case GDT_Float64: return "GDT_Float64";
-      default: return "GDT_Unknown";
+     // This is the list of datatypes suppred by the RANDOM_RASTER format
+    static const std::vector<GDALDataType> s_supportedGDTs = {
+        GDT_Byte,
+        GDT_UInt16,
+        GDT_Int16,
+        GDT_UInt32,
+        GDT_Int32,
+        GDT_UInt64,
+        GDT_Int64,
+        GDT_Float32,
+        GDT_Float64,
+        // Add other GDALDataTypes here as needed for your application
+        // e.g., GDT_CInt16, GDT_CFloat32, etc.
+    };
+
+    std::string gdal_data_type_to_string(GDALDataType type) 
+    {
+      bool is_supported = std::find(s_supportedGDTs.begin(), s_supportedGDTs.end(), type) != s_supportedGDTs.end();
+      if (is_supported) {
+        return GDALGetDataTypeName(type);
+      }
+      else {
+        return "Unknown";
       }
     }
-
+        
     GDALDataType string_to_gdal_data_type(const std::string& str) {
-      if (str == "GDT_Byte") return GDT_Byte;
-      else if (str == "GDT_UInt16") return GDT_UInt16;
-      else if (str == "GDT_Int16") return GDT_Int16;
-      else if (str == "GDT_UInt32") return GDT_UInt32;
-      else if (str == "GDT_Int32") return GDT_Int32;
-      else if (str == "GDT_Float32") return GDT_Float32;
-      else if (str == "GDT_Float64") return GDT_Float64;
-      else return GDT_Unknown;
+      static std::map<std::string, GDALDataType> s_stringToGDTMap;
+      static std::once_flag s_mapInitFlag;
+      std::call_once(s_mapInitFlag, []() {
+        for (GDALDataType type : s_supportedGDTs) {
+          s_stringToGDTMap[GDALGetDataTypeName(type)] = type;
+        }
+        });
+
+      // Attempt to find the input string in our populated map.
+      auto it = s_stringToGDTMap.find(str);
+      if (it != s_stringToGDTMap.end()) {
+        return it->second;
+      }
+      else {
+        // If the string is not supported
+        return GDT_Unknown;
+      }
     }
-    
+       
     bool is_random_raster_json(const nlohmann::json& j) {
       return j.contains("type") && j["type"].is_string() && j["type"].get<std::string>() == "RANDOM_RASTER";
     }
@@ -171,7 +193,10 @@ namespace pronto {
         CPLError(CE_Failure, CPLE_AppDefined, "JSON parsing error: %s", e.what());
         return false;
       }
-      return validate();
+      catch (const std::runtime_error& e) {
+        CPLError(CE_Failure, CPLE_AppDefined, "Invalid parameters: %s", e.what());
+      }
+      return validate(); // will also raise errors
     }
 
 

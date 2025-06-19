@@ -31,14 +31,16 @@ Here's the general structure of the JSON string:
 * ```type```: (Required, string) Must be set to ```"RANDOM_RASTER"```. This identifies the custom driver.
 * ```rows```: (Required, integer) The number of rows (height) of the generated raster.
 * ```cols```: (Required, integer) The number of columns (width) of the generated raster.
-* ```data_type```: (Required, string) The GDAL data type for the raster bands. Supported values are:
-    * ```"GDT_Byte"``` (Unsigned 8-bit integer)
-    * ```"GDT_UInt16"``` (Unsigned 16-bit integer)
-    * ```"GDT_Int16"``` (Signed 16-bit integer)
-    * ```"GDT_UInt32"``` (Unsigned 32-bit integer)
-    * ```"GDT_Int32"``` (Signed 32-bit integer)
-    * ```"GDT_Float32"``` (32-bit floating point)
-    * ```"GDT_Float64"``` (64-bit floating point)
+* ```data_type```: (Required, string) The data type for the raster bands. Supported values are:
+    * ```"Byte"``` (Unsigned 8-bit integer)
+    * ```"UInt16"``` (Unsigned 16-bit integer)
+    * ```"Int16"``` (Signed 16-bit integer)
+    * ```"UInt32"``` (Unsigned 32-bit integer)
+    * ```"Int32"``` (Signed 32-bit integer)
+    * ```"UInt64"``` (Unsigned 64-bit integer)
+    * ```"Int64"``` (Signed 64-bit integer)
+    * ```"Float32"``` (32-bit floating point)
+    * ```"Float64"``` (64-bit floating point)
 * ```seed```: (Optional, unsigned integer) The seed for the random number generator. If not provided, a time-based seed is used, making each raster unique. Providing a seed ensures reproducibility.
 * ```block_rows```: (Optional, integer) The height of internal blocks used by GDAL for caching. Defaults to 256 if not specified.
 * ```block_cols```: (Optional, integer) The width of internal blocks used by GDAL for caching. Defaults to 256 if not specified.
@@ -51,20 +53,20 @@ Here's the general structure of the JSON string:
 
 This custom format supports a wide range of standard C++ random distributions. The choice of distribution depends on whether you're generating integer or floating-point raster data.
 
-*Note on ```GDT_Byte```: While ```GDT_Byte``` represents unsigned 8-bit integers (0-255), some underlying C++ standard library distributions don't directly support ```unsigned char```. Internally, ```short``` or ```int``` is used for the distribution, and the results are then safely cast to ```GDT_Byte```. *
+*Note on ```Byte```: While ```Byte``` represents unsigned 8-bit integers (0-255), some underlying C++ standard library distributions don't directly support ```unsigned char```. Internally, ```short``` or ```int``` is used for the distribution, and the results are then safely cast to ``unsigned char```. *
 
 ### Integer Distributions
 
-These distributions are suitable for ```GDT_Byte```, ```GDT_UInt16```, ```GDT_Int16```, ```GDT_UInt32```, and ```GDT_Int32``` data types.
+These distributions are suitable for ```Byte```, ```UInt16```, ```Int16```, ```UInt32```, ```Int32````, ```UInt64```, and ```Int64``` data types.
 
 1.  ```uniform_integer```
     * Description: Generates uniformly distributed random integers in a specified range.
     * Parameters:
         * ```a```: (Integer) The inclusive lower bound of the range.
-            * Default: std::numeric_limits<Type>::min() (e.g., 0 for ```GDT_Byte```, -32768 for ```GDT_Int16```).
+            * Default: std::numeric_limits<Type>::min() (e.g., 0 for ```Byte```, -32768 for ```Int16```).
         * ```b```: (Integer) The inclusive upper bound of the range.
-            * Default: std::numeric_limits<Type>::max() (e.g., 255 for ```GDT_Byte```, 32767 for ```GDT_Int16```).
-    * Constraints: ```a``` <= ```b```. For ```GDT_Byte```, ```a``` and ```b``` must be between 0 and 255.
+            * Default: std::numeric_limits<Type>::max() (e.g., 255 for ```Byte```, 32767 for ```Int16```).
+    * Constraints: ```a``` <= ```b```. For ```Byte```, ```a``` and ```b``` must be between 0 and 255.
 
 2.  ```bernoulli```
     * Description: Generates 0 or 1 with a specified probability.
@@ -80,7 +82,7 @@ These distributions are suitable for ```GDT_Byte```, ```GDT_UInt16```, ```GDT_In
             * Default: 1.
         * ```p```: (Double) The probability of success on each trial.
             * Default: 0.5.
-    * Constraints: t >= 0. 0.0 <= p <= 1.0. For GDT_Byte, t should ideally not exceed 255.
+    * Constraints: ```t``` >= 0. 0.0 <= ```p``` <= 1.0. For ```Byte```, ```t``` should ideally not exceed the theoretical maximum of ```std::numeric_limits<Type>::max()```.
 
 4.  ```negative_binomial```
     * Description: Generates the number of failures before a specified number of successes.
@@ -108,12 +110,12 @@ These distributions are suitable for ```GDT_Byte```, ```GDT_UInt16```, ```GDT_In
 7.  ```discrete_distribution```
     * Description: Generates random integers based on a set of user-defined weights.
     * Parameters:
-        * ```weights```: (Array of Doubles) A non-empty list of non-negative weights. The probability of generating index i is proportional to weights[i].
+        * ```weights```: (Array of Doubles) A non-empty list of non-negative weights. The probability of generating index ```i``` is proportional to ```weights[i]```.
     * Constraints: ```weights``` array must contain at least one element.
 
 ### Real Distributions
 
-These distributions are suitable for ```GDT_Float32``` and ```GDT_Float64``` data types.
+These distributions are suitable for ```Float32``` and ```Float64``` data types.
 
 1.  ```uniform_real```
     * Description: Generates uniformly distributed random real numbers in a specified range.
@@ -192,7 +194,7 @@ These distributions are suitable for ```GDT_Float32``` and ```GDT_Float64``` dat
             * Default: 1.0.
         * ```n```: (Float/Double) Degrees of freedom for the denominator.
             * Default: 1.0.
-    * Constraints: m > 0.0, n > 0.0.
+    * Constraints: ```m``` > 0.0, ```n``` > 0.0.
 
 10. ```student_t```
     * Description: Generates random numbers according to the Student's t-distribution.
@@ -219,7 +221,7 @@ These distributions are suitable for ```GDT_Float32``` and ```GDT_Float64``` dat
 
 ## Example Usage (C++)
 
-The following C++ example demonstrates how to open a random raster dataset using the custom GDAL format and read some pixel values. This example generates a 256x512 raster of GDT_Byte values, with values uniformly distributed between 1 and 6 (inclusive), mimicking a dice roll.
+The following C++ example demonstrates how to open a random raster dataset using the custom GDAL format and read some pixel values. This example generates a 256x512 raster of Byte values, with values uniformly distributed between 1 and 6 (inclusive), mimicking a dice roll.
 
 ```cpp
 #include <iostream>
@@ -235,14 +237,14 @@ int main() {
     GDALAllRegister();
 
     // Define the JSON parameters for the random raster.
-    // This defines a 256x512 raster of GDT_Byte (unsigned char) values
+    // This defines a 256x512 raster of Byte (unsigned char) values
     // with a uniform integer distribution between 1 and 6, using a fixed seed.
     const char* json_params =
         "{"
         "  \"type\": \"RANDOM_RASTER\","
         "  \"rows\": 256,"
         "  \"cols\": 512,"
-        "  \"data_type\": \"GDT_Byte\","
+        "  \"data_type\": \"Byte\","
         "  \"seed\": 1234,"
         "  \"block_rows\": 64,"
         "  \"block_cols\": 64,"
@@ -280,7 +282,7 @@ int main() {
     std::cout << "Block width: " << block_x_size << ", height: " << block_y_size << std::endl;
 
     // Allocate a buffer to hold the data for one block.
-    // GDT_Byte means each element is 1 byte.
+    // Byte means each element is 1 byte.
     int size_of_element = 1;
     GByte* block_data = new GByte[static_cast<size_t>(block_x_size) * block_y_size * size_of_element];
 

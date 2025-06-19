@@ -9,8 +9,7 @@
 
 #pragma once
 
-#include <pronto/raster/block_generator_interface.h>
-#include <pronto/raster/random_block_generator.h>
+
 
 #include <ctime>
 #include <functional> // For std::function
@@ -24,52 +23,16 @@
 #include <cpl_error.h>
 #include <gdal.h>
 #include <gdal_priv.h>
+#include <gdal_typetraits.h>
 
 #include <nlohmann/json.hpp>
 
+#include <pronto/raster/block_generator_interface.h>
+#include <pronto/raster/random_block_generator.h>
 namespace pronto {
   namespace raster {
 
-    template<GDALDataType T>
-    struct gdal_data_type_traits {
-      typedef void type;
-      static const char* name; // Declaration
-    };
-
-    template<> struct gdal_data_type_traits<GDT_Byte> {
-      typedef GByte type;
-      static constexpr const char* name = "GDT_Byte";
-    };
-
-    template<> struct gdal_data_type_traits<GDT_UInt16> {
-      typedef GUInt16 type;
-      static constexpr const char* name = "GDT_UInt16";
-    };
-
-    template<> struct gdal_data_type_traits<GDT_Int16> {
-      typedef GInt16 type;
-      static constexpr const char* name = "GDT_Int16";
-    };
-
-    template<> struct gdal_data_type_traits<GDT_UInt32> {
-      typedef GUInt32 type;
-      static constexpr const char* name = "GDT_UInt32";
-    };
-
-    template<> struct gdal_data_type_traits<GDT_Int32> {
-      typedef GInt32 type;
-      static constexpr const char* name = "GDT_Int32";
-    };
-
-    template<> struct gdal_data_type_traits<GDT_Float32> {
-      typedef float type;
-      static constexpr const char* name = "GDT_Float32";
-    };
-
-    template<> struct gdal_data_type_traits<GDT_Float64> {
-      typedef double type;
-      static constexpr const char* name = "GDT_Float64";
-    };
+   
 
     enum class distribution_type {
       uniform_integer,
@@ -185,7 +148,7 @@ namespace pronto {
       template<class DistributionType, GDALDataType TargetGdalTypeEnum>
       std::unique_ptr<block_generator_interface> make_generator(DistributionType dist) const
       {
-        typedef typename gdal_data_type_traits<TargetGdalTypeEnum>::type TargetGdalType;
+        typedef typename gdal::GDALDataTypeTraits<TargetGdalTypeEnum>::type TargetGdalType;
         return std::unique_ptr<random_block_generator<DistributionType, TargetGdalType>>(
           new random_block_generator<DistributionType, TargetGdalType>(
             m_seed,
@@ -212,7 +175,7 @@ namespace pronto {
         // This general template handles all integer GDAL types *except* GDT_Byte for uniform_integer,
         // where GDT_Byte has its own specialization above.
         // It also handles all other integer distributions for all IntType which are suitable for std::..._distribution.
-        typedef typename gdal_data_type_traits<T>::type IntType;
+        typedef typename gdal::GDALDataTypeTraits<T>::type IntType;
 
         switch (m_distribution) {
         case distribution_type::uniform_integer: {
@@ -356,7 +319,7 @@ namespace pronto {
 
       template<GDALDataType T>
       std::unique_ptr<block_generator_interface> dispatch_real_distribution() const {
-        typedef typename gdal_data_type_traits<T>::type RealType;
+        typedef typename gdal::GDALDataTypeTraits<T>::type RealType;
 
         switch (m_distribution) {
         case distribution_type::uniform_real: {
