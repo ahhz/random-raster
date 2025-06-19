@@ -1,11 +1,10 @@
 #include <iostream>
-#include <string>
 
 #include <gdal.h>
 #include <gdal_priv.h>
 
 #ifndef RANDOM_RASTER_DRIVER_PATH
-#define RANDOM_RASTER_DRIVER_PATH "path/to/the/gdal_RANDOM_RASTER.dll/directory"
+#define RANDOM_RASTER_DRIVER_PATH "path/to/the/gdal_RANDOM_RASTER_shared_library/directory"
 #endif
 
 bool check_driver_installed() {
@@ -13,11 +12,12 @@ bool check_driver_installed() {
   return (driver != nullptr);
 }
 
-void install_driver_using_macro() {
+bool install_driver_manually() {
   const char* restore_path = CPLGetConfigOption("GDAL_DRIVER_PATH", nullptr);
   CPLSetConfigOption("GDAL_DRIVER_PATH", RANDOM_RASTER_DRIVER_PATH); 
   GetGDALDriverManager()->AutoLoadDrivers(); 
   CPLSetConfigOption("GDAL_DRIVER_PATH", restore_path); 
+  return check_driver_installed();
 }
 
 
@@ -31,15 +31,12 @@ int main() {
   if (check_driver_installed()) {
     std::cout << "RANDOM_RASTER driver automatically registered successfully!" << std::endl;
   }
+  else if (install_driver_manually()){
+    std::cout << "RANDOM_RASTER driver manually registered successfully!" << std::endl;
+  }
   else {
-    install_driver_using_macro();
-    if (check_driver_installed()) {
-      std::cout << "RANDOM_RASTER driver manually registered successfully!" << std::endl;
-    }
-    else {
-      std::cerr << "RANDOM_RASTER driver not found." << std::endl;
-      return 1; // Exit if the driver is not found
-    }
+    std::cerr << "RANDOM_RASTER driver not found." << std::endl;
+    return 1; // Exit if the driver is not found
   }
    
   const char* json_params =
@@ -54,11 +51,11 @@ int main() {
     "  \"distribution\": \"uniform_integer\","
     "  \"distribution_parameters\": {"
     "    \"a\": 1,"
-    "    \"b\": 6"
+    "    \"b\": 256"
     "  }"
     "}";
 
-  GDALDataset* dataset = (GDALDataset * )GDALOpen(json_params, GA_ReadOnly);
+  GDALDataset* dataset = (GDALDataset*)GDALOpen(json_params, GA_ReadOnly);
 
   if (dataset == nullptr) {
     std::cerr << "Error: Could not open dataset.  " << CPLGetLastErrorMsg() << std::endl;
@@ -94,7 +91,7 @@ int main() {
 
   // Print a few values from the block.
   std::cout << "First few values from the block:" << std::endl;
-  for (int i = 0; i < std::min(10, block_x_size * block_y_size); ++i) {
+  for (int i = 0; i < 10; ++i) {
     std::cout << static_cast<int>(block_data[i]) << " ";
   }
   std::cout << std::endl;
