@@ -15,9 +15,8 @@
 
 #include <algorithm> // For std::min and std::max
 #include <cmath> // For std::sqrt
-#include <numeric> // For std::numeric_limits
+#include <limits> 
 #include <random>
-#include <type_traits> // For std::is_same
 
 namespace pronto {
   namespace raster {

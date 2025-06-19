@@ -8,7 +8,6 @@
 //
 #pragma once
 
-#include <iostream>
 #include <memory>
 
 #include <gdal_pam.h>
