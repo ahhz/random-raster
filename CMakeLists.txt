@@ -78,6 +78,7 @@ target_link_libraries(random_raster_app PRIVATE GDAL::GDAL)
 # ADD THIS LINE: Link the executable to your custom driver library
 #target_link_libraries(random_raster_app PRIVATE gdal_RANDOM_RASTER)
 set(RANDOM_RASTER_DLL_DIR "$<TARGET_FILE_DIR:gdal_RANDOM_RASTER>")
+target_compile_definitions(random_raster_app PRIVATE RANDOM_RASTER_DRIVER_PATH="${RANDOM_RASTER_DLL_DIR}")
 
 if(WIN32)
     # On Windows, use cmd /c to set the environment variable and then run the command

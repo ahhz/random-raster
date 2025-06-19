@@ -4,9 +4,44 @@
 #include <gdal.h>
 #include <gdal_priv.h>
 
+#ifndef RANDOM_RASTER_DRIVER_PATH
+#define RANDOM_RASTER_DRIVER_PATH "path/to/the/gdal_RANDOM_RASTER.dll/directory"
+#endif
+
+bool check_driver_installed() {
+  GDALDriver* driver = GetGDALDriverManager()->GetDriverByName("RANDOM_RASTER");
+  return (driver != nullptr);
+}
+
+void install_driver_using_macro() {
+  const char* restore_path = CPLGetConfigOption("GDAL_DRIVER_PATH", nullptr);
+  CPLSetConfigOption("GDAL_DRIVER_PATH", RANDOM_RASTER_DRIVER_PATH); 
+  GetGDALDriverManager()->AutoLoadDrivers(); 
+  CPLSetConfigOption("GDAL_DRIVER_PATH", restore_path); 
+}
+
+
 int main() {
   GDALAllRegister();
 
+  // if installed in the default folder or GDAL_DRIVER_PATH is set to point to the 
+  // installation path, the plug-in will automatically load. Otherwise, register 
+  // manually based on RANDOM_RASTER_DRIVER_PATH macro
+
+  if (check_driver_installed()) {
+    std::cout << "RANDOM_RASTER driver automatically registered successfully!" << std::endl;
+  }
+  else {
+    install_driver_using_macro();
+    if (check_driver_installed()) {
+      std::cout << "RANDOM_RASTER driver manually registered successfully!" << std::endl;
+    }
+    else {
+      std::cerr << "RANDOM_RASTER driver not found." << std::endl;
+      return 1; // Exit if the driver is not found
+    }
+  }
+   
   const char* json_params =
     "{"
     "  \"type\": \"RANDOM_RASTER\","
