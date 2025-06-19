@@ -97,18 +97,15 @@ namespace pronto {
           catch (const nlohmann::json::type_error& e) {
             const std::string msg = "Type mismatch for parameter '" + key + "'. Expected " + typeid(T).name() + ", but JSON contains a different type: " + e.what();
             CPLError(CE_Failure, CPLE_AppDefined, "%s", msg.c_str());
-            throw std::runtime_error(msg);
           }
           catch (const nlohmann::json::out_of_range& e) {
             const std::string msg = "Value out of range for parameter '" + key + "': " + e.what();
             CPLError(CE_Failure, CPLE_AppDefined, "%s", msg.c_str());
-            throw std::runtime_error(msg);
           }
           catch (const nlohmann::json::exception& e) {
             // Catch other nlohmann::json exceptions for robust error handling
             const std::string msg = "JSON error retrieving parameter '" + key + "': " + e.what();
             CPLError(CE_Failure, CPLE_AppDefined, "%s", msg.c_str());
-            throw std::runtime_error(msg);
           }
         }
         else {
@@ -118,7 +115,6 @@ namespace pronto {
         if (!validate_func(value)) {
           const std::string msg = "Invalid value for parameter '" + key + "' based on validation function.";
           CPLError(CE_Failure, CPLE_AppDefined, "%s", msg.c_str());
-          throw std::runtime_error(msg);
         }
         return value;
       }
@@ -128,13 +124,11 @@ namespace pronto {
         if (!m_distribution_parameters.contains(key)) {
           const std::string msg = "Required parameter '" + key + "' for this distribution is missing.";
           CPLError(CE_Failure, CPLE_AppDefined, "%s", msg.c_str());
-          throw std::runtime_error(msg);
         }
         const auto& j_array = m_distribution_parameters[key];
         if (!j_array.is_array()) {
           const std::string msg = "Parameter '" + key + "' must be a JSON array.";
           CPLError(CE_Failure, CPLE_AppDefined, "%s", msg.c_str());
-          throw std::runtime_error(msg);
         }
         try {
           return j_array.get<std::vector<T>>(); // nlohmann::json can directly convert to std::vector<T>
@@ -142,18 +136,16 @@ namespace pronto {
         catch (const nlohmann::json::type_error& e) {
           const std::string msg = "Type mismatch in array for parameter '" + key + "': " + e.what();
           CPLError(CE_Failure, CPLE_AppDefined, "%s", msg.c_str());
-          throw std::runtime_error(msg);
         }
         catch (const nlohmann::json::out_of_range& e) {
           const std::string msg = "Value out of range in array for parameter '" + key + "': " + e.what();
           CPLError(CE_Failure, CPLE_AppDefined, "%s", msg.c_str());
-          throw std::runtime_error(msg);
         }
         catch (const nlohmann::json::exception& e) {
           const std::string msg = "JSON error retrieving vector parameter '" + key + "': " + e.what();
           CPLError(CE_Failure, CPLE_AppDefined, "%s", msg.c_str());
-          throw std::runtime_error(msg);
         }
+        return std::vector<T>(); // Return empty vector on error
       }
 
       template<class DistributionType, class GDALType=DistributionType::result_type>
@@ -187,7 +179,7 @@ namespace pronto {
         {
           const std::string msg = "Unsupported or unknown GDALDataType for random raster generation: " + gdal_data_type_to_string(m_data_type);
           CPLError(CE_Failure, CPLE_AppDefined, "%s", msg.c_str());
-          throw std::runtime_error(msg);
+          return std::unique_ptr<block_generator_interface>();
         }
         }
       }
@@ -197,10 +189,8 @@ namespace pronto {
       std::unique_ptr<block_generator_interface> dispatch_integer_distribution() const {
         using gdal_type = gdal::GDALDataTypeTraits<T>::type;
         using distribution_result_type = std::conditional_t<
-          std::is_same_v<gdal_type, unsigned char>, // Compile-time check if gdal_target_type is unsigned char
-          short,                                            // If true, use short
-          gdal_type                                  // If false, use gdal_target_type itself
-        >;
+          std::is_same_v<gdal_type, unsigned char>, short, gdal_type>;                                  // If false, use gdal_target_type itself
+
         switch (m_distribution) {
         case distribution_type::uniform_integer: {
           using dist_type =  std::uniform_int_distribution<distribution_result_type>;
@@ -208,8 +198,7 @@ namespace pronto {
             get_parameter<gdal_type>("a", std::numeric_limits<gdal_type>::min(), [](gdal_type) {return true; }));
           auto b = static_cast<distribution_result_type>(
             get_parameter<gdal_type>("b", std::numeric_limits<gdal_type>::max(), [&](gdal_type v) {return v >= a; }));
-          
-          return make_generator<dist_type, gdal_type>(dist_type(a, b));
+           return make_generator<dist_type, gdal_type>(dist_type(a, b));
         }
         case distribution_type::bernoulli: {
           using dist_type = std::bernoulli_distribution;
@@ -249,7 +238,6 @@ namespace pronto {
           if (weights.empty()) {
             const std::string msg = "Discrete distribution requires 'weights' array with at least one element.";
             CPLError(CE_Failure, CPLE_AppDefined, "%s", msg.c_str());
-            throw std::runtime_error(msg);
           }
           return make_generator<dist_type, gdal_type>(dist_type(weights.begin(), weights.end()));
         }
@@ -257,101 +245,87 @@ namespace pronto {
         {
           const std::string msg = "Unsupported integer distribution type for GDALDataType: " + gdal_data_type_to_string(T) + " and distribution: " + std::to_string(static_cast<int>(m_distribution));
           CPLError(CE_Failure, CPLE_AppDefined, "%s", msg.c_str());
-          throw std::runtime_error(msg);
-        }
+          return std::unique_ptr<block_generator_interface>();
+         }
         }
       }
       
       template<GDALDataType T>
       std::unique_ptr<block_generator_interface> dispatch_real_distribution() const {
-        typedef typename gdal::GDALDataTypeTraits<T>::type RealType;
+        using RealType = gdal::GDALDataTypeTraits<T>::type;
 
         switch (m_distribution) {
         case distribution_type::uniform_real: {
-          typedef std::uniform_real_distribution<RealType> D;
           RealType a = get_parameter<RealType>("a", std::numeric_limits<RealType>::lowest(), [](RealType val) { return true; });
           RealType b = get_parameter<RealType>("b", std::numeric_limits<RealType>::max(), [&](RealType val) { return val >= a; });
-          return make_generator(D(a, b));
+          return make_generator(std::uniform_real_distribution<RealType>(a, b));
         }
         case distribution_type::weibull: {
-          typedef std::weibull_distribution<RealType> D;
           RealType a = get_parameter<RealType>("a", 1.0, [](RealType val) { return val > 0.0; });
           RealType b = get_parameter<RealType>("b", 1.0, [](RealType val) { return val > 0.0; });
-          return make_generator(D(a, b));
+          return make_generator(std::weibull_distribution<RealType>(a, b));
         }
         case distribution_type::extreme_value: {
-          typedef std::extreme_value_distribution<RealType> D;
           RealType a = get_parameter<RealType>("a", 0.0, [](RealType val) { return true; });
           RealType b = get_parameter<RealType>("b", 1.0, [](RealType val) { return val > 0.0; });
-          return make_generator(D(a, b));
+          return make_generator(std::extreme_value_distribution<RealType>(a, b));
         }
         case distribution_type::cauchy: {
-          typedef std::cauchy_distribution<RealType> D;
           RealType a = get_parameter<RealType>("a", 0.0, [](RealType val) { return true; });
           RealType b = get_parameter<RealType>("b", 1.0, [](RealType val) { return val > 0.0; });
-          return make_generator(D(a, b));
+          return make_generator(std::cauchy_distribution<RealType>(a, b));
         }
         case distribution_type::normal: {
-          typedef std::normal_distribution<RealType> D;
           RealType mean = get_parameter<RealType>("mean", 0.0, [](RealType val) { return true; });
           RealType stddev = get_parameter<RealType>("stddev", 1.0, [](RealType val) { return val >= 0.0; });
-          return make_generator(D(mean, stddev));
+          return make_generator(std::normal_distribution<RealType>(mean, stddev));
         }
         case distribution_type::exponential: {
-          typedef std::exponential_distribution<RealType> D;
           RealType lambda = get_parameter<RealType>("lambda", 1.0, [](RealType val) { return val > 0.0; });
-          return make_generator(D(lambda));
+          return make_generator(std::exponential_distribution<RealType>(lambda));
         }
         case distribution_type::gamma: {
-          typedef std::gamma_distribution<RealType> D;
           RealType alpha = get_parameter<RealType>("alpha", 1.0, [](RealType val) { return val > 0.0; });
           RealType beta = get_parameter<RealType>("beta", 1.0, [](RealType val) { return val > 0.0; });
-          return make_generator(D(alpha, beta));
+          return make_generator(std::gamma_distribution<RealType>(alpha, beta));
         }
         case distribution_type::lognormal: {
-          typedef std::lognormal_distribution<RealType> D;
           RealType m = get_parameter<RealType>("m", 0.0, [](RealType val) { return true; });
           RealType s = get_parameter<RealType>("s", 1.0, [](RealType val) { return val >= 0.0; });
-          return make_generator(D(m, s));
+          return make_generator(std::lognormal_distribution<RealType>(m, s));
         }
         case distribution_type::fisher_f: {
-          typedef std::fisher_f_distribution<RealType> D;
           RealType m = get_parameter<RealType>("m", 1.0, [](RealType val) { return val > 0.0; });
           RealType n = get_parameter<RealType>("n", 1.0, [](RealType val) { return val > 0.0; });
-          return make_generator(D(m, n));
+          return make_generator(std::fisher_f_distribution<RealType>(m, n));
         }
         case distribution_type::student_t: {
-          typedef std::student_t_distribution<RealType> D;
           RealType n = get_parameter<RealType>("n", 1.0, [](RealType val) { return val > 0.0; });
-          return make_generator(D(n));
+          return make_generator(std::student_t_distribution<RealType>(n));
         }
         case distribution_type::piecewise_constant: {
-          typedef std::piecewise_constant_distribution<RealType> D;
           std::vector<RealType> intervals = get_vector_parameter<RealType>("intervals");
           std::vector<RealType> densities = get_vector_parameter<RealType>("densities");
           if (intervals.size() < 2 || densities.size() != intervals.size() - 1) {
             const std::string msg = "Piecewise constant distribution requires at least two 'intervals' and 'densities' count one less than 'intervals'.";
             CPLError(CE_Failure, CPLE_AppDefined, "%s", msg.c_str());
-            throw std::runtime_error(msg);
           }
-          return make_generator(D(intervals.begin(), intervals.end(), densities.begin()));
+          return make_generator(std::piecewise_constant_distribution<RealType>(intervals.begin(), intervals.end(), densities.begin()));
         }
         case distribution_type::piecewise_linear: {
-          typedef std::piecewise_linear_distribution<RealType> D;
           std::vector<RealType> intervals = get_vector_parameter<RealType>("intervals");
           std::vector<RealType> densities = get_vector_parameter<RealType>("densities");
           if (intervals.size() < 2 || densities.size() != intervals.size()) {
             const std::string msg = "Piecewise linear distribution requires at least two 'intervals' and 'densities' count equal to 'intervals'.";
             CPLError(CE_Failure, CPLE_AppDefined, "%s", msg.c_str());
-            throw std::runtime_error(msg);
           }
-          return make_generator(D(intervals.begin(), intervals.end(), densities.begin()));
+          return make_generator(std::piecewise_linear_distribution<RealType>(intervals.begin(), intervals.end(), densities.begin()));
         }
         default:
         {
           const std::string msg = "Unsupported real distribution type for GDALDataType: " + gdal_data_type_to_string(T) + " and distribution: " + std::to_string(static_cast<int>(m_distribution));
           CPLError(CE_Failure, CPLE_AppDefined, "%s", msg.c_str());
-          throw std::runtime_error(msg);
+          return std::unique_ptr<block_generator_interface>();
         }
         }
       }
