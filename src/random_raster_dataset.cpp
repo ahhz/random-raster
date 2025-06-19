@@ -54,7 +54,12 @@ namespace pronto {
     // GDAL driver entry point for opening datasets.
     GDALDataset* random_raster_dataset::Open(GDALOpenInfo* openInfo)
     {
-	    std::cout << "Opening file: " << openInfo->pszFilename << std::endl;
+      // first check if the openInfo is purporting to be a random raster dataset
+     if(!random_raster_dataset::IdentifyEx(nullptr, openInfo)) {
+        return nullptr; // Not a random raster dataset.
+     }
+     // now any failure to read can report an error
+
       std::string content_to_parse;
 
       // 1. Check if the input is a file path and if it matches our criteria
@@ -64,8 +69,6 @@ namespace pronto {
         std::string filename_str = openInfo->pszFilename;
         if (filename_str.length() < 5 || !EQUAL(filename_str.c_str() + filename_str.length() - 5, ".json"))
         {
-          std::cout << "Not a.json file" << std::endl;
-
           return nullptr; // Not a .json file.
         }
 
@@ -78,7 +81,6 @@ namespace pronto {
         // Read file content.
         VSILFILE* fp = VSIFOpenL(openInfo->pszFilename, "rb");
         if (fp == nullptr) {
-          std::cout << "File can't be opened" << std::endl;
           return nullptr; // File can't be opened.
         }
 
@@ -87,14 +89,11 @@ namespace pronto {
         VSIFCloseL(fp);
 
         if (bytes_read != (size_t)sStatBuf.st_size) {
-          std::cout << "Incomplete Read" << std::endl;
           CPLError(CE_Debug, CPLE_AppDefined, "Incomplete read of JSON parameter file: %s", openInfo->pszFilename);
           return nullptr; // Incomplete read.
         }
       }
       else {
-        std::cout << "Not a regular files, assume it is a JSON string" <<std::endl;
-
         // Not a regular file, assume the filename string itself is the JSON content.
         content_to_parse = openInfo->pszFilename;
       }

@@ -35,8 +35,7 @@ namespace pronto {
       ~random_raster_dataset() override = default;
       static int IdentifyEx(GDALDriver* poDriver, GDALOpenInfo* openInfo)
       {
-	      std::cout << "IdentifyEx called for file: " << openInfo->pszFilename << std::endl;
-        std::string content_to_parse;
+	       std::string content_to_parse;
 
         // First, try to handle it as a regular file if openInfo->pszFilename exists
         VSIStatBufL sStatBuf;
