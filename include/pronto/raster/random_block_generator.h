@@ -6,8 +6,8 @@
 // Distributed under the MIT Licence (http://opensource.org/licenses/MIT)
 //=======================================================================
 //
-// Class for filling GDAL raster blocks with random values from std 
-// library distributions
+// Class for filling GDAL raster blocks with random values from standard
+// library random distributions
 
 #pragma once
 

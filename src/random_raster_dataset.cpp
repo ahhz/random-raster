@@ -14,9 +14,8 @@
 #include <ogr_spatialref.h> // For OGRSpatialReference
 
 #include <pronto/raster/block_generator_interface.h> 
-#include <pronto/raster/random_raster_dataset.h>
 #include <pronto/raster/random_raster_band.h>
-
+#include <pronto/raster/random_raster_dataset.h>
 
 #define PRONTO_RASTER_MAX_JSON_FILE_SIZE (10 * 1024 * 1024) // 10 MB limit
 
@@ -107,6 +106,7 @@ namespace pronto {
     GDALDataset* random_raster_dataset::Open(GDALOpenInfo* openInfo)
     {
       // first check if the openInfo is purporting to be a random raster dataset
+
      if(!random_raster_dataset::IdentifyEx(nullptr, openInfo)) {
         return nullptr; // Not a random raster dataset.
      }
@@ -151,13 +151,11 @@ namespace pronto {
       random_raster_parameters params;
       if (!params.from_json(j)) {
         CPLError(CE_Failure, CPLE_AppDefined, "JSON for RANDOM_RASTER but content parsing failed. Message: %s", CPLGetLastErrorMsg());
-       // CPLErrorReset();
         return nullptr;
       }
       if(!params.validate()) {
         // actually the validate function will already raise errors
         CPLError(CE_Failure, CPLE_AppDefined, "JSON for RANDOM_RASTER but parameters validation failed. Message: %s", CPLGetLastErrorMsg());
-        //CPLErrorReset();
         return nullptr;
       }
 

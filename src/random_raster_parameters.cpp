@@ -80,7 +80,7 @@ namespace pronto {
       }
     }
 
-     // This is the list of datatypes suppred by the RANDOM_RASTER format
+     // This is the list of datatypes supported by the RANDOM_RASTER format
     static const std::vector<GDALDataType> s_supportedGDTs = {
         GDT_Byte,
         GDT_UInt16,
@@ -91,9 +91,7 @@ namespace pronto {
         GDT_Int64,
         GDT_Float32,
         GDT_Float64,
-        // Add other GDALDataTypes here as needed for your application
-        // e.g., GDT_CInt16, GDT_CFloat32, etc.
-    };
+     };
 
     std::string gdal_data_type_to_string(GDALDataType type) 
     {
