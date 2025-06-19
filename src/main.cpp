@@ -44,14 +44,14 @@ int main() {
     "  \"type\": \"RANDOM_RASTER\","
     "  \"rows\": 256,"
     "  \"cols\": 512,"
-    "  \"data_type\": \"GDT_Byte\","
+    "  \"data_type\": \"Byte\","
     "  \"seed\": 1234,"
     "  \"block_rows\": 64,"
     "  \"block_cols\": 64,"
     "  \"distribution\": \"uniform_integer\","
     "  \"distribution_parameters\": {"
     "    \"a\": 1,"
-    "    \"b\": 256"
+    "    \"b\": 6"
     "  }"
     "}";
 
