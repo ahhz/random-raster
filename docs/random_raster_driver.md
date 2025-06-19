@@ -53,7 +53,7 @@ Here's the general structure of the JSON string:
 
 This custom format supports a wide range of standard C++ random distributions. The choice of distribution depends on whether you're generating integer or floating-point raster data.
 
-*Note on ```Byte```: While ```Byte``` represents unsigned 8-bit integers (0-255), some underlying C++ standard library distributions don't directly support ```unsigned char```. Internally, ```short``` or ```int``` is used for the distribution, and the results are then safely cast to ``unsigned char```. *
+*Note on ```Byte```: While ```Byte``` represents unsigned 8-bit integers (0-255), some underlying C++ standard library distributions don't directly support ```unsigned char```. Internally, ```short``` is used for the distribution, and the results are then cast to ``unsigned char```. *
 
 ### Integer Distributions
 
