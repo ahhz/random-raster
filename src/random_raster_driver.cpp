@@ -23,8 +23,8 @@ namespace pronto {
       GDALDriver* driver = new GDALDriver();
 
       driver->SetDescription("RANDOM_RASTER");
-      driver->SetMetadataItem(GDAL_DMD_LONGNAME, "Randomly Generated Raster");
-      driver->SetMetadataItem(GDAL_DMD_HELPTOPIC, "https://gdal.org");
+      driver->SetMetadataItem(GDAL_DMD_LONGNAME, "Random Distribution Raster");
+      driver->SetMetadataItem(GDAL_DMD_HELPTOPIC, "https://github.com/ahhz/random-raster/blob/main/docs/random_raster_driver.md");
       driver->SetMetadataItem(GDAL_DCAP_VIRTUALIO, "YES");
       driver->SetMetadataItem(GDAL_DCAP_RASTER, "YES");
       driver->SetMetadataItem(GDAL_DMD_EXTENSION, "json"); 
