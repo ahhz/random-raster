@@ -105,63 +105,91 @@ namespace pronto {
     // GDAL driver entry point for opening datasets.
     GDALDataset* random_raster_dataset::Open(GDALOpenInfo* openInfo)
     {
-      // first check if the openInfo is purporting to be a random raster dataset
-
-     if(!random_raster_dataset::IdentifyEx(nullptr, openInfo)) {
+      if (!random_raster_dataset::IdentifyEx(nullptr, openInfo)) {
         return nullptr; // Not a random raster dataset.
-     }
-
-     // now any failure to read can report errors as failures
-
+      }
+      // Simplify boolean declaration for clarity
+      const bool is_purely_in_memory_buffer = openInfo->pabyHeader != nullptr && openInfo->nHeaderBytes > 0;
       std::string content_to_parse;
-
-      //Check if the input is a file path and if it matches our criteria
-      VSIStatBufL sStatBuf;
-      if (VSIStatL(openInfo->pszFilename, &sStatBuf) == 0 && VSI_ISREG(sStatBuf.st_mode)) {
-        std::string filename_str = openInfo->pszFilename;
-        // Read file content.
+      std::string dataset_id = ""; // Name for GDAL's description/PAM
+      if (is_purely_in_memory_buffer)
+      {
+        content_to_parse.assign(reinterpret_cast<const char*>(openInfo->pabyHeader), openInfo->nHeaderBytes);
+        dataset_id = "random_raster_in_memory_data"; // Generic ID for in-memory
+      }
+      else if (openInfo->pszFilename != nullptr && strlen(openInfo->pszFilename) > 0)
+      {
+        dataset_id = openInfo->pszFilename; // Filename is the ID for PAM and dataset description
         VSILFILE* fp = VSIFOpenL(openInfo->pszFilename, "rb");
+
         if (fp == nullptr) {
-          CPLError(CE_Failure, CPLE_AppDefined, "File can't be opened: %s", openInfo->pszFilename);
-          return nullptr; // File can't be opened.
+          CPLError(CE_Failure, CPLE_AppDefined, "File/resource can't be opened: %s", openInfo->pszFilename);
+          return nullptr;
         }
-
-        content_to_parse.resize(sStatBuf.st_size);
-        size_t bytes_read = VSIFReadL(&content_to_parse[0], 1, sStatBuf.st_size, fp);
+        VSIFSeekL(fp, 0, SEEK_END);
+        vsi_l_offset file_size = VSIFTellL(fp);
+        VSIFSeekL(fp, 0, SEEK_SET);
+        if (file_size > PRONTO_RASTER_MAX_JSON_FILE_SIZE) {
+          CPLError(CE_Failure, CPLE_AppDefined, "JSON file too large (%lld bytes) for in-memory parsing: %s",
+            static_cast<long long>(file_size), openInfo->pszFilename);
+          VSIFCloseL(fp);
+          return nullptr;
+        }
+        content_to_parse.resize(static_cast<size_t>(file_size));
+        size_t bytes_read = VSIFReadL(&content_to_parse[0], 1, static_cast<size_t>(file_size), fp);
         VSIFCloseL(fp);
-        if (bytes_read != (size_t)sStatBuf.st_size) {
+
+        if (bytes_read != static_cast<size_t>(file_size)) {
           CPLError(CE_Failure, CPLE_AppDefined, "Incomplete read of JSON parameter file: %s", openInfo->pszFilename);
-          return nullptr; // Incomplete read.
+          return nullptr;
         }
       }
+
       else {
-        // Not a regular file, assume the filename string itself is the JSON content.
-        content_to_parse = openInfo->pszFilename;
+        CPLError(CE_Failure, CPLE_AppDefined, "No data source (filename or buffer) provided.");
+        return nullptr;
       }
 
-       nlohmann::json j;
+      // --- JSON Parsing ---
+      nlohmann::json j;
+
       try {
         j = nlohmann::json::parse(content_to_parse);
       }
-      catch (const nlohmann::json::exception&) {
-		  std::cout << "Failed to parse JSON content, malformed JSON: " << content_to_parse << std::endl;
-        return nullptr; // Malformed JSON.
+      catch (const nlohmann::json::exception& e) {
+        CPLError(CE_Failure, CPLE_AppDefined, "Failed to parse JSON content from '%s', malformed JSON: %s. Error: %s",
+
+          dataset_id.empty() ? "unknown_source" : dataset_id.c_str(), content_to_parse.c_str(), e.what());
+        return nullptr;
       }
-           
+      // --- Parameters Validation ---
+
       random_raster_parameters params;
+
       if (!params.from_json(j)) {
         CPLError(CE_Failure, CPLE_AppDefined, "JSON for RANDOM_RASTER but content parsing failed. Message: %s", CPLGetLastErrorMsg());
         return nullptr;
+
       }
-      if(!params.validate()) {
-        // actually the validate function will already raise errors
+      if (!params.validate()) {
         CPLError(CE_Failure, CPLE_AppDefined, "JSON for RANDOM_RASTER but parameters validation failed. Message: %s", CPLGetLastErrorMsg());
         return nullptr;
       }
 
-      return random_raster_dataset::create(params);
-    }
+      random_raster_dataset* poDS = random_raster_dataset::create(params);
 
+      if (poDS == nullptr) {
+        return nullptr;
+      }
+      // Set the virtual flag and PAM description based on source type
+      poDS->m_bIsVirtual = is_purely_in_memory_buffer; // Simpler assignment
+      poDS->SetDescription(dataset_id.c_str());
+      if (!is_purely_in_memory_buffer) {
+        poDS->TryLoadXML(openInfo->GetSiblingFiles());
+      }
+      return poDS;
+
+    }
     CPLErr random_raster_dataset::GetGeoTransform(double* padfTransform)
     {
       // A default GeoTransform: 1x1 pixel size, no rotation, origin at (0,0)

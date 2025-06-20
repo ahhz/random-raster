@@ -42,6 +42,7 @@ namespace pronto {
       static GDALDataset* Open(GDALOpenInfo* openInfo);
       CPLErr GetGeoTransform(double* padfTransform) override;
       const OGRSpatialReference* GetSpatialRef() const override;
+      bool m_bIsVirtual;
     };
 
   } // namespace raster
