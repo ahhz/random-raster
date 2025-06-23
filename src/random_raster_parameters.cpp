@@ -1,255 +1,594 @@
-//=======================================================================
-// Copyright 2024-2025
-// Author: Alex Hagen-Zanker
-// University of Surrey
-//
-// Distributed under the MIT Licence (http://opensource.org/licenses/MIT)
-//=======================================================================
 
-#include <ctime>
-#include <limits>
+#include <iostream>
+#include <string>
+#include <vector>
 #include <map>
-#include <random>
+#include <memory>
 #include <stdexcept>
-
-#include <cpl_error.h>
-#include <gdal.h>
-#include <gdal_priv.h>
+#include <random>
+#include <functional>
+#include <limits>
+#include <chrono> // For std::chrono::system_clock
+#include <algorithm>
+#include <cstdint>
 
 #include <nlohmann/json.hpp>
 
-#include <pronto/raster/random_block_generator.h>
-#include <pronto/raster/random_raster_parameters.h>
+#include <gdal.h>
+#include <gdal_priv.h>
+#include <gdal_typetraits.h>
 
+#include <pronto/raster/block_generator_interface.h>
+#include <pronto/raster/random_block_generator.h> 
+#include <pronto/raster/random_raster_dataset.h> 
 namespace pronto {
   namespace raster {
-    // Helper function to convert string to distribution_type
+// An enum to represent all supported distributions
+    enum class distribution_type {
+      unspecified,
+      // Integer Distributions
+      uniform_integer,
+      bernoulli,
+      binomial,
+      negative_binomial,
+      geometric,
+      poisson,
+      // Real Distributions
+      uniform_real,
+      normal,
+      lognormal,
+      gamma,
+      exponential,
+      weibull,
+      extreme_value,
+      cauchy,
+      fisher_f,
+      student_t,
+      chi_squared,
+      // Sampling Distributions
+      discrete,
+      piecewise_constant,
+      piecewise_linear
+    };
+
+    // Helper function to convert a string to our distribution_type enum
     distribution_type string_to_distribution_type(const std::string& dist_str) {
       static const std::map<std::string, distribution_type> dist_map = {
         {"uniform_integer", distribution_type::uniform_integer},
-        {"uniform_real", distribution_type::uniform_real},
         {"bernoulli", distribution_type::bernoulli},
         {"binomial", distribution_type::binomial},
         {"negative_binomial", distribution_type::negative_binomial},
         {"geometric", distribution_type::geometric},
+        {"poisson", distribution_type::poisson},
+        {"uniform_real", distribution_type::uniform_real},
+        {"normal", distribution_type::normal},
+        {"lognormal", distribution_type::lognormal},
+        {"gamma", distribution_type::gamma},
+        {"exponential", distribution_type::exponential},
         {"weibull", distribution_type::weibull},
         {"extreme_value", distribution_type::extreme_value},
         {"cauchy", distribution_type::cauchy},
-        {"poisson", distribution_type::poisson},
-        {"normal", distribution_type::normal},
-        {"exponential", distribution_type::exponential},
-        {"gamma", distribution_type::gamma},
-        {"lognormal", distribution_type::lognormal},
         {"fisher_f", distribution_type::fisher_f},
         {"student_t", distribution_type::student_t},
-        {"discrete_distribution", distribution_type::discrete_distribution},
+        {"chi_squared", distribution_type::chi_squared},
+        {"discrete", distribution_type::discrete},
         {"piecewise_constant", distribution_type::piecewise_constant},
         {"piecewise_linear", distribution_type::piecewise_linear}
       };
 
-      std::map<std::string, distribution_type>::const_iterator it = dist_map.find(dist_str);
+      auto it = dist_map.find(dist_str);
       if (it != dist_map.end()) {
         return it->second;
       }
-      return distribution_type::unspecified;
-    }
-
-    std::string string_from_distribution_type(distribution_type dist_enum) {
-      switch (dist_enum) {
-      case distribution_type::uniform_integer: return "uniform_integer";
-      case distribution_type::uniform_real: return "uniform_real";
-      case distribution_type::bernoulli: return "bernoulli";
-      case distribution_type::binomial: return "binomial";
-      case distribution_type::negative_binomial: return "negative_binomial";
-      case distribution_type::geometric: return "geometric";
-      case distribution_type::weibull: return "weibull";
-      case distribution_type::extreme_value: return "extreme_value";
-      case distribution_type::cauchy: return "cauchy";
-      case distribution_type::poisson: return "poisson";
-      case distribution_type::normal: return "normal";
-      case distribution_type::exponential: return "exponential";
-      case distribution_type::gamma: return "gamma";
-      case distribution_type::lognormal: return "lognormal";
-      case distribution_type::fisher_f: return "fisher_f";
-      case distribution_type::student_t: return "student_t";
-      case distribution_type::discrete_distribution: return "discrete_distribution";
-      case distribution_type::piecewise_constant: return "piecewise_constant";
-      case distribution_type::piecewise_linear: return "piecewise_linear";
-      case distribution_type::unspecified: return "unspecified"; // Should ideally not be serialized as a specific distribution type
-      default: return "unknown_distribution"; // Fallback for any unhandled new types
-      }
-    }
-
-     // This is the list of datatypes supported by the RANDOM_RASTER format
-    static const std::vector<GDALDataType> s_supportedGDTs = {
-        GDT_Byte,
-        GDT_UInt16,
-        GDT_Int16,
-        GDT_UInt32,
-        GDT_Int32,
-        GDT_UInt64,
-        GDT_Int64,
-        GDT_Float32,
-        GDT_Float64,
-     };
-
-    std::string gdal_data_type_to_string(GDALDataType type) 
-    {
-      bool is_supported = std::find(s_supportedGDTs.begin(), s_supportedGDTs.end(), type) != s_supportedGDTs.end();
-      if (is_supported) {
-        return GDALGetDataTypeName(type);
-      }
       else {
-        return "Unknown";
+        throw std::runtime_error(dist_str + " is not a supported distribution type");
       }
     }
-        
-    GDALDataType string_to_gdal_data_type(const std::string& str) {
-      static std::map<std::string, GDALDataType> s_stringToGDTMap;
-      static std::once_flag s_mapInitFlag;
-      std::call_once(s_mapInitFlag, []() {
-        for (GDALDataType type : s_supportedGDTs) {
-          s_stringToGDTMap[GDALGetDataTypeName(type)] = type;
-        }
-        });
 
-      // Attempt to find the input string in our populated map.
-      auto it = s_stringToGDTMap.find(str);
-      if (it != s_stringToGDTMap.end()) {
+    // Helper to convert distribution_type to string for error messages
+    std::string to_string(distribution_type dt) {
+      static const std::map<distribution_type, std::string> dist_map = {
+        {distribution_type::uniform_integer, "uniform_integer"},
+        {distribution_type::bernoulli, "bernoulli"},
+        {distribution_type::binomial, "binomial"},
+        {distribution_type::negative_binomial, "negative_binomial"},
+        {distribution_type::geometric, "geometric"},
+        {distribution_type::poisson, "poisson"},
+        {distribution_type::uniform_real, "uniform_real"},
+        {distribution_type::normal, "normal"},
+        {distribution_type::lognormal, "lognormal"},
+        {distribution_type::gamma, "gamma"},
+        {distribution_type::exponential, "exponential"},
+        {distribution_type::weibull, "weibull"},
+        {distribution_type::extreme_value, "extreme_value"},
+        {distribution_type::cauchy, "cauchy"},
+        {distribution_type::fisher_f, "fisher_f"},
+        {distribution_type::student_t, "student_t"},
+        {distribution_type::chi_squared, "chi_squared"},
+        {distribution_type::discrete, "discrete"},
+        {distribution_type::piecewise_constant, "piecewise_constant"},
+        {distribution_type::piecewise_linear, "piecewise_linear"}
+      };
+      auto it = dist_map.find(dt);
+      if (it != dist_map.end()) {
         return it->second;
       }
-      else {
-        // If the string is not supported
-        return GDT_Unknown;
+      return "unspecified_or_unknown_distribution";
+    }
+
+    template <typename ValueType>
+    ValueType get_required_param_no_bounds(
+      const nlohmann::json& j,
+      const std::string& key)
+    {
+      if (!j.contains(key)) {
+        throw std::runtime_error("Missing required parameter: '" + key + "'");
       }
-    }
-       
-    bool is_random_raster_json(const nlohmann::json& j) {
-      return j.contains("type") && j["type"].is_string() && j["type"].get<std::string>() == "RANDOM_RASTER";
-    }
-
-    random_raster_parameters::random_raster_parameters() :
-      m_type("RANDOM_RASTER"),
-      m_rows(0),
-      m_cols(0),
-      m_data_type(GDT_Unknown),
-      m_seed(static_cast<unsigned int>(std::time(nullptr))),
-      m_block_rows(256),
-      m_block_cols(256),
-      m_seed_set(false),
-      m_block_rows_set(false),
-      m_block_cols_set(false),
-      m_distribution(distribution_type::unspecified),
-      m_distribution_parameters(nlohmann::json::object()) // Initialize as empty JSON object
-    {
-    }
-    bool random_raster_parameters::from_json(const nlohmann::json & j) 
-    {
       try {
-        m_type = j.value("type", "RANDOM_RASTER");
-        m_rows = j.value("rows", 0);
-        m_cols = j.value("cols", 0);
-    
-        if (j.contains("data_type") && j["data_type"].is_string()) {
-          m_data_type = string_to_gdal_data_type(j["data_type"].get<std::string>());
-        }
-        else {
-          m_data_type = GDT_Unknown; // Default or error handling
-        }
-
-        if (j.contains("seed")) {
-          m_seed = j["seed"].get<unsigned int>();
-          m_seed_set = true;
-        }
-
-        if (j.contains("block_rows")) {
-          m_block_rows = j["block_rows"].get<int>();
-          m_block_rows_set = true;
-        }
-
-        if (j.contains("block_cols")) {
-          m_block_cols = j["block_cols"].get<int>();
-          m_block_cols_set = true;
-        }
-
-        if (j.contains("distribution") && j["distribution"].is_string()) {
-          m_distribution = string_to_distribution_type(j["distribution"].get<std::string>());
-        }
-        else {
-          m_distribution = distribution_type::unspecified; // Default or error
-        }
-
-        if (j.contains("distribution_parameters") && j["distribution_parameters"].is_object()) {
-          m_distribution_parameters = j["distribution_parameters"];
-        }
-        else {
-          m_distribution_parameters = nlohmann::json::object(); // Ensure it's an empty object if not present
-        }
-
+        return j.at(key).get<ValueType>();
       }
       catch (const nlohmann::json::exception& e) {
-        CPLError(CE_Failure, CPLE_AppDefined, "JSON parsing error: %s", e.what());
-        return false;
+        throw std::runtime_error("Type error or out of range for parameter '" + key + "': " + e.what());
       }
-      catch (const std::runtime_error& e) {
-        CPLError(CE_Failure, CPLE_AppDefined, "Invalid parameters: %s", e.what());
-      }
-      return validate(); // will also raise errors
     }
 
-
-    nlohmann::json random_raster_parameters::to_json() const {
-      nlohmann::json j;
-      j["type"] = m_type;
-      j["rows"] = m_rows;
-      j["cols"] = m_cols;
-      j["data_type"] = gdal_data_type_to_string(m_data_type);
-      if (m_seed_set) {
-        j["seed"] = m_seed;
-      }
-      if (m_block_rows_set) {
-        j["block_rows"] = m_block_rows;
-      }
-      if (m_block_cols_set) {
-        j["block_cols"] = m_block_cols;
-      }
-      j["distribution"] = string_from_distribution_type(m_distribution);
-      j["distribution_parameters"] = m_distribution_parameters; // Directly use the stored JSON object
-      return j;
-    }
-    
-    bool random_raster_parameters::validate() const {
-      if (m_type != "RANDOM_RASTER") {
-        CPLError(CE_Failure, CPLE_AppDefined, "Invalid type, must be RANDOM_RASTER.");
-        return false;
-      }
-      if (m_rows <= 0 || m_cols <= 0) {
-        CPLError(CE_Failure, CPLE_AppDefined, "Rows and cols must be greater than 0.");
-        return false;
-      }
-      if (m_data_type == GDT_Unknown) {
-        CPLError(CE_Failure, CPLE_AppDefined, "Data type not specified or unknown.");
-        return false;
-      }
-      if (m_distribution == distribution_type::unspecified) {
-        CPLError(CE_Failure, CPLE_AppDefined, "Distribution type not specified or unknown.");
-        return false;
-      }
-      // Add more specific validation for distribution parameters if needed,
-      // perhaps by trying to get them with validation in a dummy call.
-      return true;
-    }
-
-    bool random_raster_parameters::from_string_json(const std::string& json_string)
+    template <typename ValueType>
+    ValueType get_required_param(
+      const nlohmann::json& j,
+      const std::string& key,
+      const std::pair<ValueType, bool>& min_bound = { std::numeric_limits<ValueType>::lowest(), true },
+      const std::pair<ValueType, bool>& max_bound = { std::numeric_limits<ValueType>::max(), true })
     {
-      try {
-        nlohmann::json j = nlohmann::json::parse(json_string);
-        return from_json(j);
+      if (!j.contains(key)) {
+        throw std::runtime_error("Missing required parameter: '" + key + "'");
       }
-      catch (const nlohmann::json::parse_error& e) {
-        CPLError(CE_Failure, CPLE_AppDefined, "JSON parse error from string: %s", e.what());
-        return false;
+      ValueType value = get_required_param_no_bounds<ValueType>(j, key);
+
+      // Minimum boundary check
+      if (min_bound.second) { // Inclusive check
+        if (value < min_bound.first) {
+          throw std::runtime_error("Parameter '" + key + "' with value " + std::to_string(value) +
+            " is below the minimum inclusive bound of " + std::to_string(min_bound.first));
+        }
+      }
+      else { // Exclusive check
+        if (value <= min_bound.first) {
+          throw std::runtime_error("Parameter '" + key + "' with value " + std::to_string(value) +
+            " must be greater than the minimum exclusive bound of " + std::to_string(min_bound.first));
+        }
+      }
+      // Maximum boundary check
+      if (max_bound.second) { // Inclusive check
+        if (value > max_bound.first) {
+          throw std::runtime_error("Parameter '" + key + "' with value " + std::to_string(value) +
+            " is above the maximum inclusive bound of " + std::to_string(max_bound.first));
+        }
+      }
+      else { // Exclusive check
+        if (value >= max_bound.first) {
+          throw std::runtime_error("Parameter '" + key + "' with value " + std::to_string(value) +
+            " must be less than the maximum exclusive bound of " + std::to_string(max_bound.first));
+        }
+      }
+
+      return value;
+    }
+    // Overload for vector types where min/max bounds are not applicable
+    template <typename Vector, typename ElementType = Vector::value_type>
+    std::vector<ElementType> get_required_param_vector(const nlohmann::json& j, const std::string& key) {
+      if (!j.contains(key)) {
+        throw std::runtime_error("Missing required parameter: '" + key + "'");
+      }
+      try {
+        return j.at(key).get<std::vector<ElementType>>();
+      }
+      catch (const nlohmann::json::exception& e) {
+        throw std::runtime_error("Type error for parameter '" + key + "': " + e.what());
       }
     }
-  } // namespace raster
-} // namespace pronto
+
+    template <typename ValueType>
+    ValueType get_optional_param(
+      const nlohmann::json& j,
+      const std::string& key,
+      const ValueType& default_value,
+      const std::pair<ValueType, bool>& min_bound = { std::numeric_limits<ValueType>::lowest(), true },
+      const std::pair<ValueType, bool>& max_bound = { std::numeric_limits<ValueType>::max(), true })
+    {
+      if (!j.contains(key)) {
+        return default_value;
+      }
+      return get_required_param<ValueType>(j, key, min_bound, max_bound);
+    }
+
+    class maker_base {
+    public:
+      virtual ~maker_base() = default;
+      virtual GDALDataset* make(const nlohmann::json& params) = 0;
+    };
+
+    template <typename DistributionType, typename RasterValueType>
+    class maker;
+
+    template <typename DerivedType>
+    class typed_maker_base;
+
+    // The CRTP base class for makers
+    template <typename DistributionType, typename RasterValueType>
+    class typed_maker_base <maker<DistributionType, RasterValueType> > : public maker_base {
+    public:
+      GDALDataset* make(const nlohmann::json& j) final 
+      {
+        auto distribution_params = 
+          get_required_param_no_bounds<nlohmann::json>(j, "distribution_parameters");
+
+        auto* derived = static_cast<maker<DistributionType, RasterValueType>*>(this);
+        DistributionType dist = derived->distribution_from_json(distribution_params);
+        int rows = get_required_param<int>(j, "rows", { 1,true }); // Rows must be at least 1
+        int cols = get_required_param<int>(j, "cols", { 1,true }); // Cols must be at least 1
+
+        long long default_seed_val = std::chrono::system_clock::now().time_since_epoch().count();
+        long long seed = get_optional_param<long long>(j, "seed", default_seed_val); // Read seed as long long
+
+        int block_rows = get_optional_param<int>(j, "block_rows", 256, { 1,true });
+        int block_cols = get_optional_param<int>(j, "block_cols", 256, { 1,true });
+        GDALDataType gdal_type = gdal::CXXTypeTraits<RasterValueType>::gdal_type;
+        using random_block_generator_type = random_block_generator<DistributionType, RasterValueType>;
+        std::unique_ptr<block_generator_interface>  generator = std::make_unique<random_block_generator_type>(seed, rows, cols, block_rows, block_cols, dist);
+        return random_raster_dataset::create_from_generator(rows, cols, gdal_type, block_rows, block_cols, std::move(generator));
+      }
+    };
+
+    // --- value_type_selector ---
+    template<GDALDataType GdalDataType> struct value_type_selector {
+      using gdal_type = typename gdal::GDALDataTypeTraits<GdalDataType>::type;
+      using dist_type = typename gdal::GDALDataTypeTraits<GdalDataType>::type; // Default to GDAL type for distributions
+    };
+
+    // Specialization for GDT_Byte: distibution values cannot be unsigned char, therefore use short as smallest fitting type
+    template<> struct value_type_selector<GDT_Byte> {
+      using gdal_type = typename gdal::GDALDataTypeTraits<GDT_Byte>::type; // unsigned char
+      using dist_type = short; // Use 'short' as the internal distribution value type
+    };
+
+    template<typename DistributionType, typename RasterValueType>
+    class maker<std::uniform_int_distribution<DistributionType>, RasterValueType>
+      : public typed_maker_base<maker<std::uniform_int_distribution<DistributionType>, RasterValueType>>
+    {
+    public:
+      std::uniform_int_distribution<DistributionType> distribution_from_json(const nlohmann::json& j) const {
+        // Parameters 'a' and 'b' must be read as RasterValueType to validate against its limits.
+        auto a = get_optional_param<RasterValueType>(j, "a", std::numeric_limits<RasterValueType>::lowest());
+        auto b = get_optional_param<RasterValueType>(j, "b", std::numeric_limits<RasterValueType>::max());
+        if (a > b) throw std::runtime_error("For uniform_int_distribution, 'a' must not be greater than 'b'.");
+        return std::uniform_int_distribution<DistributionType>(static_cast<DistributionType>(a), static_cast<DistributionType>(b));
+      }
+    };
+
+    template <typename DistributionType, typename RasterValueType>
+    class maker<std::binomial_distribution<DistributionType>, RasterValueType>
+      : public typed_maker_base<maker<std::binomial_distribution<DistributionType>, RasterValueType>> {
+    public:
+      std::binomial_distribution<DistributionType> distribution_from_json(const nlohmann::json& j) const {
+        // 't' (number of trials) must be read as RasterValueType to validate against its limits.
+        auto t = get_required_param<RasterValueType>(j, "t", { 0, true }); // t >= 0
+        auto p = get_required_param<double>(j, "p", { 0.0, true }, { 1.0, true }); // p in [0,1]
+        return std::binomial_distribution<DistributionType>(static_cast<DistributionType>(t), p);
+      }
+    };
+
+    template <typename RasterValueType>
+    class maker<std::bernoulli_distribution, RasterValueType>
+      : public typed_maker_base<maker<std::bernoulli_distribution, RasterValueType>> {
+    public:
+      std::bernoulli_distribution distribution_from_json(const nlohmann::json& j) const {
+        auto p = get_optional_param<double>(j, "p", 0.5, { 0.0, true }, { 1.0, true }); // p in [0,1]
+        return std::bernoulli_distribution(p);
+      }
+    };
+
+    template <typename DistributionType, typename RasterValueType>
+    class maker<std::negative_binomial_distribution<DistributionType>, RasterValueType>
+      : public typed_maker_base<maker<std::negative_binomial_distribution<DistributionType>, RasterValueType>> {
+    public:
+      std::negative_binomial_distribution<DistributionType> distribution_from_json(const nlohmann::json& j) const {
+        // 'k' (number of successes) must be read as RasterValueType to validate against its limits.
+        auto k = get_required_param<RasterValueType>(j, "k", { 0, false }); // k > 0
+        auto p = get_required_param<double>(j, "p", { 0.0, true }, { 1.0, true }); // p in [0,1]
+        return std::negative_binomial_distribution<DistributionType>(static_cast<DistributionType>(k), p);
+      }
+    };
+
+    template <typename DistributionType, typename RasterValueType>
+    class maker<std::geometric_distribution<DistributionType>, RasterValueType>
+      : public typed_maker_base<maker<std::geometric_distribution<DistributionType>, RasterValueType>> {
+    public:
+      std::geometric_distribution<DistributionType> distribution_from_json(const nlohmann::json& j) const {
+        auto p = get_required_param<double>(j, "p", { 0.0, false }, { 1.0, true }); // p in (0,1]
+        return std::geometric_distribution<DistributionType>(p);
+      }
+    };
+
+    template <typename DistributionType, typename RasterValueType>
+    class maker<std::poisson_distribution<DistributionType>, RasterValueType>
+      : public typed_maker_base<maker<std::poisson_distribution<DistributionType>, RasterValueType>> {
+    public:
+      std::poisson_distribution<DistributionType> distribution_from_json(const nlohmann::json& j) const {
+        auto mean = get_required_param<double>(j, "mean", { static_cast<double>(0.0), false }); // mean > 0
+        return std::poisson_distribution<DistributionType>(mean);
+      }
+    };
+
+    template <typename ValueType>
+    class maker<std::uniform_real_distribution<ValueType>, ValueType>
+      : public typed_maker_base<maker<std::uniform_real_distribution<ValueType>, ValueType>> {
+    public:
+      std::uniform_real_distribution<ValueType> distribution_from_json(const nlohmann::json& j) const {
+        auto a = get_optional_param<ValueType>(j, "a", 0.0);
+        auto b = get_optional_param<ValueType>(j, "b", 1.0);
+        if (a > b) throw std::runtime_error("For uniform_real_distribution, 'a' must not be greater than 'b'.");
+        return std::uniform_real_distribution<ValueType>(a, b);
+      }
+    };
+
+    template <typename ValueType>
+    class maker<std::normal_distribution<ValueType>, ValueType>
+      : public typed_maker_base<maker<std::normal_distribution<ValueType>, ValueType>> {
+    public:
+      std::normal_distribution<ValueType> distribution_from_json(const nlohmann::json& j) const {
+        auto mean = get_optional_param<ValueType>(j, "mean", 0.0);
+        auto stddev = get_optional_param<ValueType>(j, "stddev", 1.0, { static_cast<ValueType>(0.0), false }); // stddev > 0
+        return std::normal_distribution<ValueType>(mean, stddev);
+      }
+    };
+
+    template <typename ValueType>
+    class maker<std::lognormal_distribution<ValueType>, ValueType>
+      : public typed_maker_base<maker<std::lognormal_distribution<ValueType>, ValueType>> {
+    public:
+      std::lognormal_distribution<ValueType> distribution_from_json(const nlohmann::json& j) const {
+        auto m = get_optional_param<ValueType>(j, "m", 0.0);
+        auto s = get_optional_param<ValueType>(j, "s", 1.0, { static_cast<ValueType>(0.0), false }); // s > 0
+        return std::lognormal_distribution<ValueType>(m, s);
+      }
+    };
+
+    template <typename ValueType>
+    class maker<std::gamma_distribution<ValueType>, ValueType>
+      : public typed_maker_base<maker<std::gamma_distribution<ValueType>, ValueType>> {
+    public:
+      std::gamma_distribution<ValueType> distribution_from_json(const nlohmann::json& j) const {
+        auto alpha = get_required_param<ValueType>(j, "alpha", { static_cast<ValueType>(0.0), false }); // alpha > 0
+        auto beta = get_optional_param<ValueType>(j, "beta", 1.0, { static_cast<ValueType>(0.0), false }); // beta > 0
+        return std::gamma_distribution<ValueType>(alpha, beta);
+      }
+    };
+
+    template <typename ValueType>
+    class maker<std::exponential_distribution<ValueType>, ValueType>
+      : public typed_maker_base<maker<std::exponential_distribution<ValueType>, ValueType>> {
+    public:
+      std::exponential_distribution<ValueType> distribution_from_json(const nlohmann::json& j) const {
+        auto lambda = get_optional_param<ValueType>(j, "lambda", 1.0, { static_cast<ValueType>(0.0), false }); // lambda > 0
+        return std::exponential_distribution<ValueType>(lambda);
+      }
+    };
+
+    template <typename ValueType>
+    class maker<std::weibull_distribution<ValueType>, ValueType>
+      : public typed_maker_base<maker<std::weibull_distribution<ValueType>, ValueType>> {
+    public:
+      std::weibull_distribution<ValueType> distribution_from_json(const nlohmann::json& j) const {
+        auto a = get_required_param<ValueType>(j, "a", { static_cast<ValueType>(0.0), false }); // a > 0
+        auto b = get_required_param<ValueType>(j, "b", { static_cast<ValueType>(0.0), false }); // b > 0
+        return std::weibull_distribution<ValueType>(a, b);
+      }
+    };
+
+    template <typename ValueType>
+    class maker<std::extreme_value_distribution<ValueType>, ValueType>
+      : public typed_maker_base<maker<std::extreme_value_distribution<ValueType>, ValueType>> {
+    public:
+      std::extreme_value_distribution<ValueType> distribution_from_json(const nlohmann::json& j) const {
+        auto a = get_optional_param<ValueType>(j, "a", 0.0);
+        auto b = get_optional_param<ValueType>(j, "b", 1.0, { static_cast<ValueType>(0.0), false }); // b > 0
+        return std::extreme_value_distribution<ValueType>(a, b);
+      }
+    };
+
+    template <typename ValueType>
+    class maker<std::cauchy_distribution<ValueType>, ValueType>
+      : public typed_maker_base<maker<std::cauchy_distribution<ValueType>, ValueType>> {
+    public:
+      std::cauchy_distribution<ValueType> distribution_from_json(const nlohmann::json& j) const {
+        auto a = get_optional_param<ValueType>(j, "a", 0.0);
+        auto b = get_optional_param<ValueType>(j, "b", 1.0, {static_cast<ValueType>(0.0), false }); // b > 0
+        return std::cauchy_distribution<ValueType>(a, b);
+      }
+    };
+
+    template <typename ValueType>
+    class maker<std::fisher_f_distribution<ValueType>, ValueType>
+      : public typed_maker_base<maker<std::fisher_f_distribution<ValueType>, ValueType>> {
+    public:
+      std::fisher_f_distribution<ValueType> distribution_from_json(const nlohmann::json& j) const {
+        auto m = get_required_param<ValueType>(j, "m", { static_cast<ValueType>(0.0), false }); // m > 0
+        auto n = get_required_param<ValueType>(j, "n", { static_cast<ValueType>(0.0), false }); // n > 0
+        return std::fisher_f_distribution<ValueType>(m, n);
+      }
+    };
+
+    template <typename ValueType>
+    class maker<std::student_t_distribution<ValueType>, ValueType>
+      : public typed_maker_base<maker<std::student_t_distribution<ValueType>, ValueType>> {
+    public:
+      std::student_t_distribution<ValueType> distribution_from_json(const nlohmann::json& j) const {
+        auto n = get_required_param<ValueType>(j, "n", { static_cast<ValueType>(0.0), false }); // n > 0
+        return std::student_t_distribution<ValueType>(n);
+      }
+    };
+
+    template <typename ValueType>
+    class maker<std::chi_squared_distribution<ValueType>, ValueType>
+      : public typed_maker_base<maker<std::chi_squared_distribution<ValueType>, ValueType>> {
+    public:
+      std::chi_squared_distribution<ValueType> distribution_from_json(const nlohmann::json& j) const {
+        auto n = get_required_param<ValueType>(j, "n", { static_cast<ValueType>(0.0), false }); // n > 0
+        return std::chi_squared_distribution<ValueType>(n);
+      }
+    };
+
+    // --- Sampling Distributions ---
+    template <typename DistributionType, typename RasterValueType>
+    class maker<std::discrete_distribution<DistributionType>, RasterValueType>
+      : public typed_maker_base<maker<std::discrete_distribution<DistributionType>, RasterValueType>> {
+    public:
+      std::discrete_distribution<DistributionType> distribution_from_json(const nlohmann::json& j) const {
+        auto weights = get_required_param_vector<std::vector<double>>(j, "weights");
+        for (const auto& weight : weights) {
+          if (weight < 0.0) {
+            throw std::runtime_error("For discrete_distribution, all weights must be non-negative.");
+          }
+        }
+        return std::discrete_distribution<DistributionType>(weights.begin(), weights.end());
+      }
+    };
+
+    template <typename DistributionType, typename RasterValueType>
+    class maker<std::piecewise_constant_distribution<DistributionType>, RasterValueType>
+      : public typed_maker_base<maker<std::piecewise_constant_distribution<DistributionType>, RasterValueType>> {
+    public:
+      std::piecewise_constant_distribution<DistributionType> distribution_from_json(const nlohmann::json& j) const {
+        // Intervals must be read as RasterValueType for validation, then cast for the distribution.
+        auto intervals = get_required_param_vector<std::vector<RasterValueType>>(j, "intervals");
+        auto densities = get_required_param_vector<std::vector<double>>(j, "densities");
+        if (intervals.size() != densities.size() + 1) {
+          throw std::runtime_error("For piecewise_constant, 'intervals' size must be 'densities' size + 1.");
+        }
+        std::vector<DistributionType> converted_intervals;
+        converted_intervals.reserve(intervals.size());
+        for (const auto& val : intervals) {
+          converted_intervals.push_back(static_cast<DistributionType>(val));
+        }
+        return std::piecewise_constant_distribution<DistributionType>(converted_intervals.begin(), converted_intervals.end(), densities.begin());
+      }
+    };
+
+    template <typename DistributionType, typename RasterValueType>
+    class maker<std::piecewise_linear_distribution<DistributionType>, RasterValueType>
+      : public typed_maker_base<maker<std::piecewise_linear_distribution<DistributionType>, RasterValueType>> {
+    public:
+      std::piecewise_linear_distribution<DistributionType> distribution_from_json(const nlohmann::json& j) const {
+        // Intervals must be read as RasterValueType for validation, then cast for the distribution.
+        auto intervals = get_required_param_vector<std::vector<RasterValueType>>(j, "intervals");
+        auto densities = get_required_param_vector<std::vector<double>>(j, "densities");
+        if (intervals.size() != densities.size()) {
+          throw std::runtime_error("For piecewise_linear, 'intervals' size must be equal to 'densities' size.");
+        }
+        std::vector<DistributionType> converted_intervals;
+        converted_intervals.reserve(intervals.size());
+        for (const auto& val : intervals) {
+          converted_intervals.push_back(static_cast<DistributionType>(val));
+        }
+        return std::piecewise_linear_distribution<DistributionType>(converted_intervals.begin(), converted_intervals.end(), densities.begin());
+      }
+    };
+
+    template<GDALDataType GdalDataType>
+    std::unique_ptr<maker_base> get_maker_int(distribution_type dt) {
+      using gdal_type = typename value_type_selector<GdalDataType>::gdal_type;
+      using dist_type = typename value_type_selector<GdalDataType>::dist_type;
+
+      switch (dt) {
+      case distribution_type::uniform_integer:
+        return std::make_unique<maker<std::uniform_int_distribution<dist_type>, gdal_type>>();
+      case distribution_type::bernoulli:
+        return std::make_unique<maker<std::bernoulli_distribution, gdal_type>>();
+      case distribution_type::binomial:
+        return std::make_unique<maker<std::binomial_distribution<dist_type>, gdal_type>>();
+      case distribution_type::negative_binomial:
+        return std::make_unique<maker<std::negative_binomial_distribution<dist_type>, gdal_type>>();
+      case distribution_type::geometric:
+        return std::make_unique<maker<std::geometric_distribution<dist_type>, gdal_type>>();
+      case distribution_type::poisson:
+        return std::make_unique<maker<std::poisson_distribution<dist_type>, gdal_type>>();
+      case distribution_type::discrete:
+        return std::make_unique<maker<std::discrete_distribution<dist_type>, gdal_type>>();
+      default:
+        throw std::runtime_error("Distribution type '" + to_string(dt) +
+          "' is not an integer distribution compatible with GDALDataType " +
+          GDALGetDataTypeName(GdalDataType) + ".");
+      }
+    }
+
+    template<GDALDataType GdalDataType>
+    std::unique_ptr<maker_base> get_maker_real(distribution_type dt) {
+      using gdal_type = typename value_type_selector<GdalDataType>::gdal_type;
+      using dist_type = typename value_type_selector<GdalDataType>::dist_type;
+      switch (dt) {
+      case distribution_type::uniform_real:
+        return std::make_unique<maker<std::uniform_real_distribution<dist_type>, gdal_type>>();
+      case distribution_type::normal:
+        return std::make_unique<maker<std::normal_distribution<dist_type>, gdal_type>>();
+      case distribution_type::lognormal:
+        return std::make_unique<maker<std::lognormal_distribution<dist_type>, gdal_type>>();
+      case distribution_type::gamma:
+        return std::make_unique<maker<std::gamma_distribution<dist_type>, gdal_type>>();
+      case distribution_type::exponential:
+        return std::make_unique<maker<std::exponential_distribution<dist_type>, gdal_type>>();
+      case distribution_type::weibull:
+        return std::make_unique<maker<std::weibull_distribution<dist_type>, gdal_type>>();
+      case distribution_type::extreme_value:
+        return std::make_unique<maker<std::extreme_value_distribution<dist_type>, gdal_type>>();
+      case distribution_type::cauchy:
+        return std::make_unique < maker<std::cauchy_distribution<dist_type>, gdal_type>>();
+      case distribution_type::fisher_f:
+        return std::make_unique<maker<std::fisher_f_distribution<dist_type>, gdal_type>>();
+      case distribution_type::student_t:
+        return std::make_unique<maker<std::student_t_distribution<dist_type>, gdal_type>>();
+      case distribution_type::chi_squared:
+        return std::make_unique<maker<std::chi_squared_distribution<dist_type>, gdal_type>>();
+      case distribution_type::piecewise_constant:
+        return std::make_unique<maker<std::piecewise_constant_distribution<dist_type>, gdal_type>>();
+      case distribution_type::piecewise_linear:
+        return std::make_unique<maker<std::piecewise_linear_distribution<dist_type>, gdal_type>>();
+
+      default:
+        throw std::runtime_error("Distribution type '" + to_string(dt) +
+          "' is not a real or sampling distribution compatible with GDALDataType " +
+          GDALGetDataTypeName(GdalDataType) + ".");
+      }
+    }
+
+    std::unique_ptr<maker_base> get_maker(distribution_type dt, GDALDataType gdt) {
+      switch (gdt) {
+      case GDT_Byte:    return get_maker_int<GDT_Byte>(dt);
+      case GDT_UInt16:  return get_maker_int<GDT_UInt16>(dt);
+      case GDT_Int16:    return get_maker_int<GDT_Int16>(dt);
+      case GDT_UInt32:  return get_maker_int<GDT_UInt32>(dt);
+      case GDT_Int32:    return get_maker_int<GDT_Int32>(dt);
+      case GDT_UInt64:  return get_maker_int<GDT_UInt64>(dt);
+      case GDT_Int64:    return get_maker_int<GDT_Int64>(dt);
+      case GDT_Float32: return get_maker_real<GDT_Float32>(dt);
+      case GDT_Float64: return get_maker_real<GDT_Float64>(dt);
+      default:
+        throw std::runtime_error("Unsupported GDALDataType '" + std::string(GDALGetDataTypeName(gdt)) + "' for random generation.");
+      }
+    }
+
+    GDALDataset* random_raster_dataset::create_from_json(const nlohmann::json& j) {
+      auto data_type_str = get_required_param_no_bounds<std::string>(j, "data_type");
+      GDALDataType gdt = GDALGetDataTypeByName(data_type_str.c_str());
+      if (gdt == GDT_Unknown) {
+        throw std::runtime_error("Unknown or unsupported GDAL data type: " + data_type_str);
+      }
+
+      auto dist_type_str = get_required_param_no_bounds<std::string>(j, "distribution");
+      distribution_type dt = string_to_distribution_type(dist_type_str);
+
+      std::unique_ptr<maker_base> maker_ptr = get_maker(dt, gdt);
+
+      return maker_ptr->make(j);
+    }
+  }
+}

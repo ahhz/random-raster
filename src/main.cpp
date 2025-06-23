@@ -40,8 +40,8 @@ int main() {
   else {
     std::cerr << "RANDOM_RASTER driver not found. Please ensure RANDOM_RASTER_DRIVER_PATH is correct and the driver is built." << std::endl;
     std::cerr << "Current RANDOM_RASTER_DRIVER_PATH set to: " << RANDOM_RASTER_DRIVER_PATH << std::endl;
-    GDALDestroyDriverManager(); // Clean up GDAL resources before exiting
-    return 1; // Exit if the driver is not found
+    GDALDestroyDriverManager(); 
+    return 1; 
   }
 
   const std::string json_params =

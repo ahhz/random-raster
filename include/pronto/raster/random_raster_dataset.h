@@ -13,6 +13,8 @@
 #include <gdal_pam.h>
 #include <gdal_priv.h>
 
+#include <nlohmann/json.hpp>
+
 #include <pronto/raster/block_generator_interface.h> 
 #include <pronto/raster/random_raster_parameters.h> 
 
@@ -32,13 +34,13 @@ namespace pronto {
     public:
       random_raster_dataset() = delete; // Disable default constructor.
       ~random_raster_dataset() override = default;
-   
-      // --- Public Static Factory Method for Direct C++ Instantiation ---
-      // Creates a random_dataset instance using parameters.
-      static random_raster_dataset* create(const random_raster_parameters& params);
 
-      // GDAL Required functions:
-      static int IdentifyEx(GDALDriver* poDriver, GDALOpenInfo* openInfo);
+      static GDALDataset* create_from_generator(
+        int rows, int cols, GDALDataType data_type,
+        int block_rows, int block_cols, std::unique_ptr<block_generator_interface>&& block_generator);
+
+      static GDALDataset* create_from_json(const nlohmann::json& json_params);
+      static int Identify(GDALOpenInfo* openInfo);
       static GDALDataset* Open(GDALOpenInfo* openInfo);
       CPLErr GetGeoTransform(double* padfTransform) override;
       const OGRSpatialReference* GetSpatialRef() const override;
