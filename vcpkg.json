@@ -1,9 +1,33 @@
 {
-  "name": "pronto-raster-random-raster",
-  "version": "1.0.0",
+  "name": "pronto-random-raster",
+  "version-string": "1.0.0",
+  "builtin-baseline": "984f9232b2fe0eb94f5e9f161d6c632c581fff0c",
   "dependencies": [
     "gdal",
-    "nlohmann-json"
+    "nlohmann-json",
+    "python3"
   ],
-  "builtin-baseline": "984f9232b2fe0eb94f5e9f161d6c632c581fff0c"
+  "default-features": [
+    "gdal"
+  ],
+  "features": {
+    "gdal": {
+      "description": "GDAL with common features",
+      "dependencies": [
+        {
+          "name": "gdal",
+          "default-features": false,
+          "features": [
+            "tools"
+          ]
+        }
+      ]
+    }
+  },
+  "overrides": [
+    { 
+        "name": "gdal", 
+        "version": "3.10.1"
+    }
+  ]
 }

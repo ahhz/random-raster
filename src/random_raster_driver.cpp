@@ -14,6 +14,9 @@
 
 // Register the driver with GDAL when the library is loaded.
 extern "C" {
+#ifdef _WIN32
+  __declspec(dllexport)
+#endif
   void GDALRegister_RANDOM_RASTER()
   {
     if (GDALGetDriverByName("RANDOM_RASTER") != nullptr)
@@ -32,6 +35,14 @@ extern "C" {
     driver->pfnIdentify = pronto::raster::random_raster_dataset::Identify;
 
     GetGDALDriverManager()->RegisterDriver(driver);
+  }
 
+// Some GDAL plugin loaders look for this as a fallback
+#ifdef _WIN32
+  __declspec(dllexport)
+#endif
+  void GDALRegisterMe()
+  {
+    GDALRegister_RANDOM_RASTER();
   }
 }

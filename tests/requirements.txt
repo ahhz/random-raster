@@ -1,0 +1,3 @@
+pytest
+gdal-installer
+numpy

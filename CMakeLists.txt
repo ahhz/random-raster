@@ -1,103 +1,111 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.18)
 
-# This CMake file now works "out of the box" in conjunction with vcpkg in manifest mode, along with the vcpkg.json file
-set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON) 
-project(pronto_random_raster)
+project(ProntoRandomRaster LANGUAGES CXX)
 
-################################################################
-# Configure Project Properties
-#
-if(MSVC)
-    set(PRONTO_CXX_STANDARD 23) # /std:c++latest for msvc
-else()
-    set(PRONTO_CXX_STANDARD 20)
-endif()
+# --- Dependencies with vcpkg ---
+# Find the necessary packages using vcpkg's manifest mode.
+find_package(gdal CONFIG REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
 
-set(PROJECT_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
+# --- Project Definition ---
+# Add the 'include' directory for header files.
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
-################################################################
-# Define Source Files
-#
-
-# 1. Define files for the GDAL DRIVER (SHARED LIBRARY)
-set(pronto_driver_files
-    ${PROJECT_INCLUDE_DIR}/pronto/raster/block_generator_interface.h
-    ${PROJECT_INCLUDE_DIR}/pronto/raster/random_block_generator.h
-    ${PROJECT_INCLUDE_DIR}/pronto/raster/random_raster_dataset.h
-    ${PROJECT_INCLUDE_DIR}/pronto/raster/random_raster_driver.h
-    ${PROJECT_INCLUDE_DIR}/pronto/raster/random_raster_band.h
-    ${PROJECT_INCLUDE_DIR}/pronto/raster/random_raster_parameters.h
+# Create the shared library for the GDAL driver from your source files.
+add_library(pronto_random_raster SHARED
     ${CMAKE_CURRENT_SOURCE_DIR}/src/random_raster_dataset.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/random_raster_driver.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/random_raster_band.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/random_raster_parameters.cpp
 )
-
-# 2. Define files for the TEST EXECUTABLE
-set(pronto_app_files
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp
+set_target_properties(pronto_random_raster PROPERTIES
+    OUTPUT_NAME "gdal_RANDOM_RASTER"
 )
 
-################################################################
-# Find Dependencies
-#
-find_package(GDAL CONFIG REQUIRED)
-find_package(nlohmann_json REQUIRED)
+# --- Output Location for built DLL (Temporary during build) ---
+# Keep this so Visual Studio puts the DLL in a standard spot after compilation.
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
+message(STATUS "CMAKE_LIBRARY_OUTPUT_DIRECTORY (build output) set to: ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}") # Diagnostic
 
-################################################################
-# Target 1: The GDAL Driver as a SHARED LIBRARY
-#
-add_library(gdal_RANDOM_RASTER SHARED ${pronto_driver_files})
 
-# Set properties for the driver library
-set_target_properties(gdal_RANDOM_RASTER PROPERTIES
-    CXX_STANDARD ${PRONTO_CXX_STANDARD}
-    CXX_STANDARD_REQUIRED ON
-    # Set the output name to be clean, without prefixes like "lib" on Linux
-    PREFIX ""
+# Link the necessary libraries to your driver.
+target_link_libraries(pronto_random_raster PRIVATE GDAL::GDAL nlohmann_json::nlohmann_json)
+
+# --- Output Location for built DLL ---
+# Define a specific directory within the build tree for installed GDAL plugins.
+set(GDAL_PLUGIN_INSTALL_DIR "${CMAKE_BINARY_DIR}/gdal_plugins")
+message(STATUS "GDAL_PLUGIN_INSTALL_DIR (plugin install target) set to: ${GDAL_PLUGIN_INSTALL_DIR}")
+
+# Ensure the plugin directory exists
+file(MAKE_DIRECTORY ${GDAL_PLUGIN_INSTALL_DIR})
+
+# Add a POST_BUILD custom command to copy the DLL to the GDAL_PLUGIN_INSTALL_DIR
+add_custom_command(TARGET pronto_random_raster POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy
+            $<TARGET_FILE:pronto_random_raster>
+            ${GDAL_PLUGIN_INSTALL_DIR}/$<TARGET_FILE_NAME:pronto_random_raster>
+    COMMENT "Copying driver to plugin directory: ${GDAL_PLUGIN_INSTALL_DIR}"
 )
 
-# Public include for any code consuming this library (like our test app)
-target_include_directories(gdal_RANDOM_RASTER PUBLIC ${PROJECT_INCLUDE_DIR})
+# The install() command is for when you run 'cmake --install'
+install(TARGETS pronto_random_raster
+    DESTINATION ${GDAL_PLUGIN_INSTALL_DIR}
+    COMPONENT gdal_driver
+)
 
-# Link the driver library against its dependencies
-target_link_libraries(gdal_RANDOM_RASTER PUBLIC GDAL::GDAL)
-target_link_libraries(gdal_RANDOM_RASTER PRIVATE nlohmann_json::nlohmann_json)
-
-
-################################################################
-# Target 2: The Test Executable
+# --- Python Testing Setup ---
 #
-add_executable(random_raster_app ${pronto_app_files})
+# Construct paths using vcpkg-provided variables.
+set(VCPKG_TRIPLET_INSTALL_DIR "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}")
+message(STATUS "Vcpkg triplet install dir: ${VCPKG_TRIPLET_INSTALL_DIR}")
 
-# Set properties for the test executable
-set_target_properties(random_raster_app PROPERTIES CXX_STANDARD ${PRONTO_CXX_STANDARD})
+set(VCPKG_PYTHON_EXECUTABLE "${VCPKG_TRIPLET_INSTALL_DIR}/tools/python3/python.exe")
+message(STATUS "Expecting vcpkg Python executable at: ${VCPKG_PYTHON_EXECUTABLE}")
 
-# Link the test app against GDAL to use its functions
-target_link_libraries(random_raster_app PRIVATE GDAL::GDAL)
-# ADD THIS LINE: Link the executable to your custom driver library
-#target_link_libraries(random_raster_app PRIVATE gdal_RANDOM_RASTER)
-set(RANDOM_RASTER_DLL_DIR "$<TARGET_FILE_DIR:gdal_RANDOM_RASTER>")
-target_compile_definitions(random_raster_app PRIVATE RANDOM_RASTER_DRIVER_PATH="${RANDOM_RASTER_DLL_DIR}")
+# Helper targets for locating python, pytest, and gdal-installer in the venv
+add_executable(python_in_venv IMPORTED)
+add_executable(pytest_in_venv IMPORTED)
+#add_executable(gdal_installer_in_venv IMPORTED)
 
 if(WIN32)
-    # On Windows, use cmd /c to set the environment variable and then run the command
-    # Use && to chain commands, ensuring the env var is set before running the app.
-    # The quotes are crucial for paths with spaces and for the whole command string.
-    # We explicitly expand %PATH% and %GDAL_DRIVER_PATH% so they are evaluated *within* cmd.exe
-    add_custom_target(run_app
-        COMMAND cmd /c "set \"PATH=${RANDOM_RASTER_DLL_DIR};%PATH%\" && set \"GDAL_DRIVER_PATH=${RANDOM_RASTER_DLL_DIR};%GDAL_DRIVER_PATH%\" && \"$<TARGET_FILE:random_raster_app>\""
-        DEPENDS gdal_RANDOM_RASTER random_raster_app
-        USES_TERMINAL # Important for seeing stdout/stderr and interactive prompts
-        COMMENT "Running test app with GDAL_DRIVER_PATH extended for Windows..."
-    )
+    set_property(TARGET python_in_venv PROPERTY IMPORTED_LOCATION ${CMAKE_BINARY_DIR}/venv/Scripts/python.exe)
+    set_property(TARGET pytest_in_venv PROPERTY IMPORTED_LOCATION ${CMAKE_BINARY_DIR}/venv/Scripts/pytest.exe)
+    #set_property(TARGET gdal_installer_in_venv PROPERTY IMPORTED_LOCATION ${CMAKE_BINARY_DIR}/venv/Scripts/gdal-installer.exe)
 else()
-    # On Unix-like systems (Linux, macOS), use sh -c to set the environment variable and run
-    # Use && for chaining. The syntax for appending to PATH/GDAL_DRIVER_PATH is different.
-    add_custom_target(run_app
-        COMMAND sh -c "export PATH=${RANDOM_RASTER_DLL_DIR}:${PATH} && export GDAL_DRIVER_PATH=${RANDOM_RASTER_DLL_DIR}:${GDAL_DRIVER_PATH} && \"$<TARGET_FILE:random_raster_app>\""
-        DEPENDS gdal_RANDOM_RASTER random_raster_app
-        USES_TERMINAL
-        COMMENT "Running test app with GDAL_DRIVER_PATH extended for Unix..."
-    )
+    set_property(TARGET python_in_venv PROPERTY IMPORTED_LOCATION ${CMAKE_BINARY_DIR}/venv/bin/python)
+    set_property(TARGET pytest_in_venv PROPERTY IMPORTED_LOCATION ${CMAKE_BINARY_DIR}/venv/bin/pytest)
+    #set_property(TARGET gdal_installer_in_venv PROPERTY IMPORTED_LOCATION ${CMAKE_BINARY_DIR}/venv/bin/gdal-installer)
 endif()
+
+# Define a custom target to set up the testing environment.
+add_custom_target(setup_test_env
+    COMMAND ${VCPKG_PYTHON_EXECUTABLE} -m venv venv
+    COMMAND $<TARGET_FILE:python_in_venv> -m pip install --upgrade pip
+    COMMAND $<TARGET_FILE:python_in_venv> -m pip install -r ${CMAKE_SOURCE_DIR}/tests/requirements.txt
+    # Run the specific Python script for GDAL installation
+    COMMAND $<TARGET_FILE:python_in_venv> ${CMAKE_BINARY_DIR}/venv/Lib/site-packages/gdal_installer/install-gdal.py
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    COMMENT "Creating Python virtual environment, installing dependencies, and GDAL"
+)
+
+# --- Test Execution Setup ---
+
+# Path to the GDAL DLLs installed by vcpkg for the C++ build.
+set(VCPKG_GDAL_BIN_PATH "${VCPKG_TRIPLET_INSTALL_DIR}/bin")
+
+# Construct the full PATH environment variable for the test execution.
+# The order is critical: vcpkg path must come first to ensure the correct
+# GDAL DLLs are loaded, matching the ones the driver was compiled against.
+set(FULL_TEST_PATH "${GDAL_PLUGIN_INSTALL_DIR};${VCPKG_GDAL_BIN_PATH};$ENV{PATH}")
+
+# Define a custom target to run the pytest tests.
+add_custom_target(run_tests
+    COMMAND ${CMAKE_COMMAND} -E env
+            "VCPKG_GDAL_BIN_DIR=${VCPKG_GDAL_BIN_PATH}"
+            "GDAL_DRIVER_PATH=${GDAL_PLUGIN_INSTALL_DIR}"
+            "PATH=${FULL_TEST_PATH}"
+            $<TARGET_FILE:pytest_in_venv>
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/tests
+    DEPENDS setup_test_env pronto_random_raster
+    COMMENT "Running pytest with GDAL_DRIVER_PATH set"
+)
