@@ -16,12 +16,10 @@
 #include <nlohmann/json.hpp>
 
 #include <pronto/raster/block_generator_interface.h> 
-#include <pronto/raster/random_raster_parameters.h> 
 
 namespace pronto {
   namespace raster {
-    class random_raster_parameters; //forward declaration
-    class random_raster_dataset : public GDALPamDataset
+     class random_raster_dataset : public GDALPamDataset
     {
     private:
       // The owned block generator.

@@ -16,7 +16,6 @@
 #include <pronto/raster/block_generator_interface.h> 
 #include <pronto/raster/random_raster_band.h>
 #include <pronto/raster/random_raster_dataset.h>
-#include <pronto/raster/random_raster_parameters.h>
 #define PRONTO_RASTER_MAX_JSON_FILE_SIZE (10 * 1024 * 1024) // 10 MB limit
 
 namespace pronto {
