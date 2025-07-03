@@ -40,6 +40,14 @@ add_library(gdal_RANDOM_RASTER SHARED
     ${CMAKE_CURRENT_SOURCE_DIR}/src/random_raster_parameters.cpp
 )
 
+# --- Add Headers to Project ---
+target_sources(gdal_RANDOM_RASTER PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/pronto/raster/random_raster_band.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/pronto/raster/random_raster_dataset.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/pronto/raster/random_raster_driver.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/pronto/raster/random_raster_parameters.h
+)
+
 target_link_libraries(gdal_RANDOM_RASTER PRIVATE GDAL::GDAL nlohmann_json::nlohmann_json)
 
 # --- Output Location for built DLL ---
@@ -86,4 +94,12 @@ add_custom_target(test
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
     DEPENDS gdal_RANDOM_RASTER
     COMMENT "Setting up Python environment and running tests..."
+)
+
+# --- Utility project to show test files in the IDE ---
+add_custom_target(tests_project)
+target_sources(tests_project PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/conftest.py
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_driver_presence.py
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/requirements.txt
 )
