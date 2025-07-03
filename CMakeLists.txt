@@ -29,7 +29,6 @@ else()
     message(STATUS "Found Python interpreter: ${PYTHON_INTERPRETER}")
 endif()
 
-
 # --- Project Definition ---
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
@@ -42,10 +41,10 @@ add_library(gdal_RANDOM_RASTER SHARED
 
 # --- Add Headers to Project ---
 target_sources(gdal_RANDOM_RASTER PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/pronto/raster/block_generator_interface.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/pronto/raster/random_block_generator.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/pronto/raster/random_raster_band.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/pronto/raster/random_raster_dataset.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/pronto/raster/random_raster_driver.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/pronto/raster/random_raster_parameters.h
 )
 
 target_link_libraries(gdal_RANDOM_RASTER PRIVATE GDAL::GDAL nlohmann_json::nlohmann_json)
