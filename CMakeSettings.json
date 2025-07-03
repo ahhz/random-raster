@@ -14,11 +14,6 @@
           "name": "CMAKE_CONFIGURATION_TYPES",
           "value": "Debug;Release;RelWithDebInfo;MinSizeRel",
           "type": "STRING"
-        },
-        {
-          "name": "INSTALL_PRONTO_RASTER_PYTHON_DEPS",
-          "value": "True",
-          "type": "BOOL"
         }
       ]
     }
