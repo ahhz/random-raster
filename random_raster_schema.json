@@ -1,0 +1,622 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Random Raster Dataset Configuration",
+  "description": "Schema for configuring the generation of a random raster dataset with various statistical distributions.",
+  "type": "object",
+  "required": [
+    "data_type",
+    "distribution",
+    "rows",
+    "cols",
+    "distribution_parameters"
+  ],
+  "properties": {
+    "data_type": {
+      "type": "string",
+      "description": "The GDAL data type for the raster bands.",
+      "enum": [
+        "Byte",
+        "UInt16",
+        "Int16",
+        "UInt32",
+        "Int32",
+        "UInt64",
+        "Int64",
+        "Float32",
+        "Float64"
+      ]
+    },
+    "distribution": {
+      "type": "string",
+      "description": "The statistical distribution to use for generating random values.",
+      "enum": [
+        "uniform_integer",
+        "bernoulli",
+        "binomial",
+        "negative_binomial",
+        "geometric",
+        "poisson",
+        "uniform_real",
+        "normal",
+        "lognormal",
+        "gamma",
+        "exponential",
+        "weibull",
+        "extreme_value",
+        "cauchy",
+        "fisher_f",
+        "student_t",
+        "chi_squared",
+        "discrete",
+        "piecewise_constant",
+        "piecewise_linear"
+      ]
+    },
+    "rows": {
+      "type": "integer",
+      "description": "Number of rows in the raster. Must be at least 1.",
+      "minimum": 1
+    },
+    "cols": {
+      "type": "integer",
+      "description": "Number of columns in the raster. Must be at least 1.",
+      "minimum": 1
+    },
+    "seed": {
+      "type": ["integer", "null"],
+      "description": "Optional seed for the random number generator. If null or omitted, current system time is used.",
+      "default": null
+    },
+    "block_rows": {
+      "type": "integer",
+      "description": "Optional number of rows per block. Must be at least 1. Defaults to 256.",
+      "minimum": 1,
+      "default": 256
+    },
+    "block_cols": {
+      "type": "integer",
+      "description": "Optional number of columns per block. Must be at least 1. Defaults to 256.",
+      "minimum": 1,
+      "default": 256
+    },
+    "distribution_parameters": {
+      "type": "object",
+      "description": "Parameters specific to the chosen statistical distribution."
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "distribution": { "const": "uniform_integer" } } },
+      "then": {
+        "properties": {
+          "distribution_parameters": {
+            "type": "object",
+            "description": "Parameters for uniform_integer_distribution.",
+            "properties": {
+              "a": {
+                "type": "number",
+                "description": "Minimum integer value (inclusive). Defaults to lowest possible for data_type."
+              },
+              "b": {
+                "type": "number",
+                "description": "Maximum integer value (inclusive). Defaults to highest possible for data_type."
+              }
+            },
+            "additionalProperties": false,
+            "not": {
+              "if": {
+                "properties": {
+                  "a": { "type": "number" },
+                  "b": { "type": "number" }
+                },
+                "required": ["a", "b"]
+              },
+              "then": {
+                "properties": {
+                  "a": { "exclusiveMinimum": { "$data": "1/b" } }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "distribution": { "const": "bernoulli" } } },
+      "then": {
+        "properties": {
+          "distribution_parameters": {
+            "type": "object",
+            "description": "Parameters for bernoulli_distribution.",
+            "properties": {
+              "p": {
+                "type": "number",
+                "description": "Probability of success. Must be in [0.0, 1.0]. Defaults to 0.5.",
+                "minimum": 0.0,
+                "maximum": 1.0,
+                "default": 0.5
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "distribution": { "const": "binomial" } } },
+      "then": {
+        "properties": {
+          "distribution_parameters": {
+            "type": "object",
+            "description": "Parameters for binomial_distribution.",
+            "required": ["t", "p"],
+            "properties": {
+              "t": {
+                "type": "integer",
+                "description": "Number of trials. Must be non-negative.",
+                "minimum": 0
+              },
+              "p": {
+                "type": "number",
+                "description": "Probability of success on each trial. Must be in [0.0, 1.0].",
+                "minimum": 0.0,
+                "maximum": 1.0
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "distribution": { "const": "negative_binomial" } } },
+      "then": {
+        "properties": {
+          "distribution_parameters": {
+            "type": "object",
+            "description": "Parameters for negative_binomial_distribution.",
+            "required": ["k", "p"],
+            "properties": {
+              "k": {
+                "type": "integer",
+                "description": "Number of successes. Must be positive.",
+                "exclusiveMinimum": 0
+              },
+              "p": {
+                "type": "number",
+                "description": "Probability of success. Must be in [0.0, 1.0].",
+                "minimum": 0.0,
+                "maximum": 1.0
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "distribution": { "const": "geometric" } } },
+      "then": {
+        "properties": {
+          "distribution_parameters": {
+            "type": "object",
+            "description": "Parameters for geometric_distribution.",
+            "required": ["p"],
+            "properties": {
+              "p": {
+                "type": "number",
+                "description": "Probability of success on each trial. Must be in (0.0, 1.0].",
+                "exclusiveMinimum": 0.0,
+                "maximum": 1.0
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "distribution": { "const": "poisson" } } },
+      "then": {
+        "properties": {
+          "distribution_parameters": {
+            "type": "object",
+            "description": "Parameters for poisson_distribution.",
+            "required": ["mean"],
+            "properties": {
+              "mean": {
+                "type": "number",
+                "description": "Mean of the distribution. Must be positive.",
+                "exclusiveMinimum": 0.0
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "distribution": { "const": "uniform_real" } } },
+      "then": {
+        "properties": {
+          "distribution_parameters": {
+            "type": "object",
+            "description": "Parameters for uniform_real_distribution.",
+            "properties": {
+              "a": {
+                "type": "number",
+                "description": "Minimum real value (inclusive). Defaults to 0.0."
+              },
+              "b": {
+                "type": "number",
+                "description": "Maximum real value (inclusive). Defaults to 1.0."
+              }
+            },
+            "additionalProperties": false,
+            "not": {
+              "if": {
+                "properties": {
+                  "a": { "type": "number" },
+                  "b": { "type": "number" }
+                },
+                "required": ["a", "b"]
+              },
+              "then": {
+                "properties": {
+                  "a": { "exclusiveMinimum": { "$data": "1/b" } }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "distribution": { "const": "normal" } } },
+      "then": {
+        "properties": {
+          "distribution_parameters": {
+            "type": "object",
+            "description": "Parameters for normal_distribution.",
+            "properties": {
+              "mean": {
+                "type": "number",
+                "description": "Mean of the distribution. Defaults to 0.0."
+              },
+              "stddev": {
+                "type": "number",
+                "description": "Standard deviation. Must be positive. Defaults to 1.0.",
+                "exclusiveMinimum": 0.0
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "distribution": { "const": "lognormal" } } },
+      "then": {
+        "properties": {
+          "distribution_parameters": {
+            "type": "object",
+            "description": "Parameters for lognormal_distribution.",
+            "properties": {
+              "m": {
+                "type": "number",
+                "description": "Mean of the associated normal distribution. Defaults to 0.0."
+              },
+              "s": {
+                "type": "number",
+                "description": "Standard deviation of the associated normal distribution. Must be positive. Defaults to 1.0.",
+                "exclusiveMinimum": 0.0
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "distribution": { "const": "gamma" } } },
+      "then": {
+        "properties": {
+          "distribution_parameters": {
+            "type": "object",
+            "description": "Parameters for gamma_distribution.",
+            "required": ["alpha"],
+            "properties": {
+              "alpha": {
+                "type": "number",
+                "description": "Shape parameter. Must be positive.",
+                "exclusiveMinimum": 0.0
+              },
+              "beta": {
+                "type": "number",
+                "description": "Scale parameter. Must be positive. Defaults to 1.0.",
+                "exclusiveMinimum": 0.0,
+                "default": 1.0
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "distribution": { "const": "exponential" } } },
+      "then": {
+        "properties": {
+          "distribution_parameters": {
+            "type": "object",
+            "description": "Parameters for exponential_distribution.",
+            "properties": {
+              "lambda": {
+                "type": "number",
+                "description": "Rate parameter. Must be positive. Defaults to 1.0.",
+                "exclusiveMinimum": 0.0,
+                "default": 1.0
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "distribution": { "const": "weibull" } } },
+      "then": {
+        "properties": {
+          "distribution_parameters": {
+            "type": "object",
+            "description": "Parameters for weibull_distribution.",
+            "required": ["a", "b"],
+            "properties": {
+              "a": {
+                "type": "number",
+                "description": "Shape parameter. Must be positive.",
+                "exclusiveMinimum": 0.0
+              },
+              "b": {
+                "type": "number",
+                "description": "Scale parameter. Must be positive.",
+                "exclusiveMinimum": 0.0
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "distribution": { "const": "extreme_value" } } },
+      "then": {
+        "properties": {
+          "distribution_parameters": {
+            "type": "object",
+            "description": "Parameters for extreme_value_distribution.",
+            "properties": {
+              "a": {
+                "type": "number",
+                "description": "Location parameter. Defaults to 0.0."
+              },
+              "b": {
+                "type": "number",
+                "description": "Scale parameter. Must be positive. Defaults to 1.0.",
+                "exclusiveMinimum": 0.0
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "distribution": { "const": "cauchy" } } },
+      "then": {
+        "properties": {
+          "distribution_parameters": {
+            "type": "object",
+            "description": "Parameters for cauchy_distribution.",
+            "properties": {
+              "a": {
+                "type": "number",
+                "description": "Location parameter. Defaults to 0.0."
+              },
+              "b": {
+                "type": "number",
+                "description": "Scale parameter. Must be positive. Defaults to 1.0.",
+                "exclusiveMinimum": 0.0
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "distribution": { "const": "fisher_f" } } },
+      "then": {
+        "properties": {
+          "distribution_parameters": {
+            "type": "object",
+            "description": "Parameters for fisher_f_distribution.",
+            "required": ["m", "n"],
+            "properties": {
+              "m": {
+                "type": "number",
+                "description": "Degrees of freedom 1. Must be positive.",
+                "exclusiveMinimum": 0.0
+              },
+              "n": {
+                "type": "number",
+                "description": "Degrees of freedom 2. Must be positive.",
+                "exclusiveMinimum": 0.0
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "distribution": { "const": "student_t" } } },
+      "then": {
+        "properties": {
+          "distribution_parameters": {
+            "type": "object",
+            "description": "Parameters for student_t_distribution.",
+            "required": ["n"],
+            "properties": {
+              "n": {
+                "type": "number",
+                "description": "Degrees of freedom. Must be positive.",
+                "exclusiveMinimum": 0.0
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "distribution": { "const": "chi_squared" } } },
+      "then": {
+        "properties": {
+          "distribution_parameters": {
+            "type": "object",
+            "description": "Parameters for chi_squared_distribution.",
+            "required": ["n"],
+            "properties": {
+              "n": {
+                "type": "number",
+                "description": "Degrees of freedom. Must be positive.",
+                "exclusiveMinimum": 0.0
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "distribution": { "const": "discrete" } } },
+      "then": {
+        "properties": {
+          "distribution_parameters": {
+            "type": "object",
+            "description": "Parameters for discrete_distribution.",
+            "required": ["weights"],
+            "properties": {
+              "weights": {
+                "type": "array",
+                "description": "List of non-negative weights for each outcome.",
+                "items": {
+                  "type": "number",
+                  "minimum": 0.0
+                },
+                "minItems": 1
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "distribution": { "const": "piecewise_constant" } } },
+      "then": {
+        "properties": {
+          "distribution_parameters": {
+            "type": "object",
+            "description": "Parameters for piecewise_constant_distribution.",
+            "required": ["intervals", "densities"],
+            "properties": {
+              "intervals": {
+                "type": "array",
+                "description": "Sorted list of interval boundaries (e.g., [x0, x1, x2, ...]).",
+                "items": { "type": "number" },
+                "minItems": 2
+              },
+              "densities": {
+                "type": "array",
+                "description": "List of densities for each interval (e.g., [d0, d1, ...]).",
+                "items": { "type": "number" },
+                "minItems": 1
+              }
+            },
+            "additionalProperties": false,
+            "required": ["intervals", "densities"],
+            "dependencies": {
+              "intervals": {
+                "not": {
+                  "if": {
+                    "properties": {
+                      "intervals": { "type": "array" },
+                      "densities": { "type": "array" }
+                    },
+                    "required": ["intervals", "densities"]
+                  },
+                  "then": {
+                    "properties": {
+                      "intervals": { "minItems": { "$data": "1/densities" } },
+                      "densities": { "maxItems": { "$data": "1/intervals" } }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "distribution": { "const": "piecewise_linear" } } },
+      "then": {
+        "properties": {
+          "distribution_parameters": {
+            "type": "object",
+            "description": "Parameters for piecewise_linear_distribution.",
+            "required": ["intervals", "densities"],
+            "properties": {
+              "intervals": {
+                "type": "array",
+                "description": "Sorted list of interval boundaries (e.g., [x0, x1, x2, ...]).",
+                "items": { "type": "number" },
+                "minItems": 1
+              },
+              "densities": {
+                "type": "array",
+                "description": "List of densities at each interval point (e.g., [d0, d1, ...]).",
+                "items": { "type": "number" },
+                "minItems": 1
+              }
+            },
+            "additionalProperties": false,
+            "required": ["intervals", "densities"],
+            "dependencies": {
+              "intervals": {
+                "not": {
+                  "if": {
+                    "properties": {
+                      "intervals": { "type": "array" },
+                      "densities": { "type": "array" }
+                    },
+                    "required": ["intervals", "densities"]
+                  },
+                  "then": {
+                    "properties": {
+                      "intervals": { "minItems": { "$data": "1/densities" } },
+                      "densities": { "maxItems": { "$data": "1/intervals" } }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "additionalProperties": false
+}
