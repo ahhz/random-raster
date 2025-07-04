@@ -219,9 +219,9 @@ These distributions are suitable for ```Float32``` and ```Float64``` data types.
 
 ---
 
-## Example Usage (C++)
+## Example Usage (Python)
 
-The following C++ example demonstrates how to open a random raster dataset using the custom GDAL format and read some pixel values. This example generates a 256x512 raster of Byte values, with values uniformly distributed between 1 and 6 (inclusive), mimicking a dice roll.
+The following example demonstrates how to open a random raster dataset using the custom GDAL format and read some pixel values. This example generates a 256x512 raster of Byte values, with values uniformly distributed between 1 and 6 (inclusive), mimicking a dice roll.
 
 ```python
 import json
