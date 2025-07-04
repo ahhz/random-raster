@@ -223,135 +223,39 @@ These distributions are suitable for ```Float32``` and ```Float64``` data types.
 
 The following C++ example demonstrates how to open a random raster dataset using the custom GDAL format and read some pixel values. This example generates a 256x512 raster of Byte values, with values uniformly distributed between 1 and 6 (inclusive), mimicking a dice roll.
 
-```cpp
-#include <iostream> 
-#include <string> 
-#include <algorithm> 
-#include <vector>    
+```python
+import json
+from osgeo import gdal
+import numpy as np
 
-#include <gdal.h>      
-#include <gdal_priv.h> 
-#include <cpl_vsi.h>   
-#include <cpl_error.h> 
-#include <cpl_conv.h>  
-
-#ifndef RANDOM_RASTER_DRIVER_PATH
-#define RANDOM_RASTER_DRIVER_PATH "path/to/the/gdal_RANDOM_RASTER_shared_library/directory" // Consider making this an env var or cmd line arg
-#endif
-
-// Function to check if the RANDOM_RASTER driver is installed
-bool check_driver_installed() {
-  GDALDriver* driver = GetGDALDriverManager()->GetDriverByName("RANDOM_RASTER");
-  return (driver != nullptr);
+# Define the JSON configuration for a 10x10 raster of dice rolls (1-6).
+dice_config = {
+    "type": "RANDOM_RASTER",
+    "rows": 10,
+    "cols": 10,
+    "data_type": "Byte",
+    "seed": 42,  # A seed ensures the output is the same every time.
+    "distribution": "uniform_integer",
+    "distribution_parameters": {
+        "a": 1,  # The minimum value (inclusive).
+        "b": 6   # The maximum value (inclusive).
+    }
 }
 
-// Function to manually install the RANDOM_RASTER driver
-bool install_driver_manually() {
-  const char* restore_path = CPLGetConfigOption("GDAL_DRIVER_PATH", nullptr);
-  CPLSetConfigOption("GDAL_DRIVER_PATH", RANDOM_RASTER_DRIVER_PATH);
-  GetGDALDriverManager()->AutoLoadDrivers(); // This will load drivers from RANDOM_RASTER_DRIVER_PATH
-  CPLSetConfigOption("GDAL_DRIVER_PATH", restore_path); // Restore original path
-  return check_driver_installed();
-}
+# Create a GDAL virtual file in memory from the JSON string.
+vsi_filename = "/vsimem/dice_roll.json"
+gdal.FileFromMemBuffer(vsi_filename, json.dumps(dice_config).encode('utf-8'))
 
-int main() {
-  GDALAllRegister(); // Register all GDAL drivers
+# Open the virtual dataset. GDAL's RANDOM_RASTER driver handles the generation.
+ds = gdal.Open(vsi_filename)
+band = ds.GetRasterBand(1)
+data = band.ReadAsArray()
 
-  if (check_driver_installed()) {
-    std::cout << "RANDOM_RASTER driver automatically registered successfully!" << std::endl;
-  }
-  else if (install_driver_manually()) {
-    std::cout << "RANDOM_RASTER driver manually registered successfully!" << std::endl;
-  }
-  else {
-    std::cerr << "RANDOM_RASTER driver not found. Please ensure RANDOM_RASTER_DRIVER_PATH is correct and the driver is built." << std::endl;
-    std::cerr << "Current RANDOM_RASTER_DRIVER_PATH set to: " << RANDOM_RASTER_DRIVER_PATH << std::endl;
-    GDALDestroyDriverManager(); 
-    return 1; 
-  }
+# Print the resulting 10x10 array of dice rolls.
+print("Simulated 10x10 dice rolls:")
+print(data)
 
-  const std::string json_params =
-    "{\n"
-    "  \"type\": \"RANDOM_RASTER\",\n"
-    "  \"rows\": 256,\n"
-    "  \"cols\": 512,\n"
-    "  \"data_type\": \"Byte\",\n"
-    "  \"seed\": 1234,\n"
-    "  \"block_rows\": 64,\n"
-    "  \"block_cols\": 64,\n"
-    "  \"distribution\": \"uniform_integer\",\n"
-    "  \"distribution_parameters\": {\n"
-    "    \"a\": 1,\n"
-    "    \"b\": 6\n"
-    "  }\n"
-    "}";
-
-  // --- Start of VSI Memory File Integration ---
-  const char* vsi_mem_filename = "/vsimem/random_raster_params.json";
-
-  VSILFILE* fp_vsimem = VSIFileFromMemBuffer(
-    vsi_mem_filename,
-    reinterpret_cast<GByte*>(const_cast<char*>(json_params.c_str())),
-    json_params.length(),
-    FALSE
-  );
-
-  if (fp_vsimem == nullptr) {
-    std::cerr << "Error: Could not create VSI memory file for JSON parameters." << std::endl;
-    std::cerr << "GDAL Last Error: " << CPLGetLastErrorMsg() << std::endl;
-    GDALDestroyDriverManager();
-    return 1;
-  }
-  VSIFCloseL(fp_vsimem);
-
-  GDALDataset* dataset = static_cast<GDALDataset*>(GDALOpen(vsi_mem_filename, GA_ReadOnly));
-
-  if (dataset == nullptr) {
-    std::cerr << "Error: Could not open dataset from VSI memory file. " << CPLGetLastErrorMsg() << std::endl;
-    VSIUnlink(vsi_mem_filename); 
-    GDALDestroyDriverManager();
-    return 1;
-  }
-  // --- End of VSI Memory File Integration ---
-
-  GDALRasterBand* band = dataset->GetRasterBand(1);
-  if (band == nullptr) {
-    std::cerr << "Error: Could not get raster band." << std::endl;
-    GDALClose(dataset);
-    VSIUnlink(vsi_mem_filename); 
-    GDALDestroyDriverManager();
-    return 1;
-  }
-
-  int width = band->GetXSize();
-  int height = band->GetYSize();
-  std::cout << "Raster width: " << width << ", height: " << height << std::endl;
-
-  int block_x_size, block_y_size;
-  band->GetBlockSize(&block_x_size, &block_y_size);
-  std::cout << "Block width: " << block_x_size << ", height: " << block_y_size << std::endl;
-
-  const int size_of_element = 1;
-  std::vector<GByte> block_data(static_cast<size_t>(block_x_size) * block_y_size * size_of_element);
-
-  CPLErr err = band->ReadBlock(0, 0, block_data.data());
-  if (err != CE_None) {
-    std::cerr << "Error: Could not read block: " << CPLGetLastErrorMsg() << std::endl;
-    GDALClose(dataset);
-    VSIUnlink(vsi_mem_filename);
-    GDALDestroyDriverManager();
-    return 1;
-  }
-
-  std::cout << "First few values from the block (should be between 1 and 6):" << std::endl;
-  for (int i = 0; i < std::min(10, block_x_size * block_y_size); ++i) {
-    std::cout << static_cast<int>(block_data[i]) << " ";
-  }
-  std::cout << std::endl;
-
-  GDALClose(dataset);
-  VSIUnlink(vsi_mem_filename); 
-  GDALDestroyDriverManager();
-
-  return 0;
-}
+# Clean up the virtual file and dataset.
+ds = None
+gdal.Unlink(vsi_filename)
+```
