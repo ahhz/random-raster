@@ -1,7 +1,9 @@
 cmake_minimum_required(VERSION 3.18)
 
 project(random_raster LANGUAGES CXX)
-
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 # --- Dependencies ---
 find_package(gdal CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
@@ -98,7 +100,9 @@ add_custom_target(test
 # --- Utility project to show test files in the IDE ---
 add_custom_target(tests_project)
 target_sources(tests_project PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/pytest.ini
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/conftest.py
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_driver_presence.py
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/requirements.txt
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_driver_presence.py
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_uniform_integer.py
 )

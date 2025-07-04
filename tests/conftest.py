@@ -20,3 +20,9 @@ def check_gdal_driver_path():
 def register_gdal_driver():
     """Fixture to ensure the custom driver is registered before tests run."""
     gdal.AllRegister()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def gdal_error_handler():
+    """Sets GDAL error handling to not use exceptions for the entire test session."""
+    gdal.DontUseExceptions()
