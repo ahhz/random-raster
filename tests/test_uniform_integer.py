@@ -90,7 +90,7 @@ def test_uniform_integer_physical_file(uniform_integer_json, tmp_path):
     data2 = ds2.GetRasterBand(1).ReadAsArray()
     assert np.array_equal(data, data2), "Data should be reproducible with the same seed."
 
-def test_uniform_integer_invalid_range(uniform_integer_json):
+def test_uniform_integer_invalid_a_greater_b(uniform_integer_json):
     """Verify that an invalid range (a > b) is handled correctly."""
     invalid_json_config = uniform_integer_json.copy()
     invalid_json_config["distribution_parameters"] = {"a": 100, "b": -100}
@@ -113,4 +113,26 @@ def test_uniform_integer_invalid_range(uniform_integer_json):
     assert "Invalid range" in error_msg or "'a' must not be greater than 'b'" in error_msg, \
         f"Expected an error message about an invalid range, but got: {error_msg}"
 
+    gdal.Unlink(vsi_filename)
+
+def test_uniform_integer_invalid_out_of_range(uniform_integer_json):
+    """Verify that a value out of range is handled correctly: Unsigned int < 0"""
+    invalid_json_config = uniform_integer_json.copy()
+    invalid_json_config["data_type"] = "UInt16"
+    invalid_json_config["distribution_parameters"] = {"a":"hello", "b": "world"}
+
+    json_str = json.dumps(invalid_json_config)
+    vsi_filename = "/vsimem/invalid_uniform_integer.json"
+    
+    gdal.FileFromMemBuffer(vsi_filename, json_str.encode('utf-8'))
+    
+    # Clear any previous errors
+    gdal.ErrorReset()
+    
+    # Suppress error messages from appearing in the console during the test
+    with gdal.quiet_errors():
+        ds = gdal.Open(vsi_filename)
+
+    assert ds is None, "Dataset should not be created with invalid type (string instead of int)."
+    print(gdal.GetLastErrorMsg())
     gdal.Unlink(vsi_filename)
